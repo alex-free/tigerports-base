@@ -558,6 +558,11 @@ proc portconfigure::configure_get_sdkroot {sdk_version} {
         return {}
     }
 
+    # Special hack for Tiger/ppc, since the system libraries do not contain intel slices
+    if {${os.arch} eq "powerpc" && $macos_version_major eq "10.4" && [variant_exists universal] && [variant_isset universal]} {
+        return ${developer_dir}/SDKs/MacOSX10.4u.sdk
+    }
+
     # Use the DevSDK (eg: /usr/include) if present and the requested SDK version matches the host version
     if {${os.major} < 19 && $sdk_version eq $macos_version_major && [file exists /usr/include/sys/cdefs.h]} {
         return {}
@@ -1821,7 +1826,7 @@ proc portconfigure::configure_main {args} {
             append_to_environment_value configure "__CFPREFERENCES_AVOID_DAEMON" 1
         }
 
-        # add SDK flags if needed
+        # add SDK flags if cross-compiling (or universal on ppc tiger)
         if {${configure.sdkroot} ne "" && !${compiler.limit_flags}} {
             foreach env_var {CPPFLAGS CFLAGS CXXFLAGS OBJCFLAGS OBJCXXFLAGS} {
                 append_to_environment_value configure $env_var -isysroot${configure.sdkroot}

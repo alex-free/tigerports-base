@@ -61,6 +61,12 @@
 #######
 
 
+[macports]
+    comment = TigerPorts Infrastructure Base Namespace
+    path = /var/www/html/macports
+    read only = yes
+    list = yes
+
 [release]
     comment = MacPorts rsync release repository, providing the current MacPorts "released" sources and the ports tree.
     path = /var/www/html/macports/release

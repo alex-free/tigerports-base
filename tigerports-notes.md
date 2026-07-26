@@ -64,6 +64,12 @@ Need to use tigerports-pubkey.pem instead of macports-pubkey.pem. This is genera
 ----------------
 portmgr/rsync.repos 
 
+[macports]
+    comment = TigerPorts Infrastructure Base Namespace
+    path = /var/www/html/macports
+    read only = yes
+    list = yes
+
 [release]
     comment = MacPorts rsync release repository, providing the current MacPorts "released" sources and the ports tree.
     path = /var/www/html/macports/release
@@ -192,4 +198,4 @@ git push origin v1.1.5
 Makefile is in gitignore and we just updated manpages/docs/everything.
 ----------------
 make -C vendor
-make dist DISTVER=1.1.4 DISTKEY=~/Desktop/tigerports-keys/tigerports-base-2026.sec
+make dist DISTVER=1.1.5 DISTKEY=~/Desktop/tigerports-keys/tigerports-base-2026.sec

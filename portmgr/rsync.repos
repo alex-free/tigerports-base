@@ -61,18 +61,17 @@
 #######
 
 
+
+[macports]
+    comment = TigerPorts Infrastructure Base Namespace
+    path = /var/www/html/macports
+    read only = yes
+    list = yes
+
 [release]
     comment = MacPorts rsync release repository, providing the current MacPorts "released" sources and the ports tree.
-    path = /Volumes/data/rsync/macports/release
+    path = /var/www/html/macports/release
 
 [trunk]
     comment = MacPorts rsync "trunk" repository, providing experimental MacPorts sources in svn's trunk/base.
-    path = /Volumes/data/rsync/macports/trunk
-
-[dpupdate]
-    comment = Legacy MacPorts rsync repository for backwards compatibility with 1.4.x releases, providing svn's trunk/base and the ports tree.
-    path = /Volumes/data/rsync/macports/dpupdate
-
-[dpupdate1]
-    comment = Legacy MacPorts rsync repository for backwards compatibility with 1.4.x releases, providing the current MacPorts "released" sources.
-    path = /Volumes/data/rsync/macports/dpupdate1
+    path = /var/www/html/macports/trunk

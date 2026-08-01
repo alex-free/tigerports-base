@@ -30,17 +30,17 @@ Tigerports is not just a fork of MacPorts. It is a recreation of the entire MacP
 
 ## Downloads
 
-### v1.1.6 (7/31/2026)
+### v1.1.7 (8/1/2026)
 
 Changes:
 
-* Rebase on PPCPorts tiger_upd branch.
+* Fix i386 vs PPC auto-detect for build_arch.
 
-* [TigerPorts-1.1.6.tar.bz2](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.6.tar.bz2) _bzip2 release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.6.tar.bz2.sig))_
+* [TigerPorts-1.1.7.tar.bz2](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.bz2) _bzip2 release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.bz2.sig))_
 
-* [TigerPorts-1.1.6.tar.gz](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.6.tar.gz) _gzip release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.6.tar.gz.sig))_
+* [TigerPorts-1.1.7.tar.gz](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.gz) _gzip release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.gz.sig))_
 
-* [TigerPorts-1.1.6.chk.txt](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.6.chk.txt) _cryptographic checksum manifest to verify the integrity of TigerPorts downloads_
+* [TigerPorts-1.1.7.chk.txt](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.chk.txt) _cryptographic checksum manifest to verify the integrity of TigerPorts downloads_
 
 [Previous versions](http://tigerports.com/macports/distfiles/MacPorts)
 

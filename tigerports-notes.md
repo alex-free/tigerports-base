@@ -188,14 +188,14 @@ Sets release version number in files.
 ----------------
 rm configure~
 git add .
-git commit -m "v1.1.5"
+git commit -m "v1.1.6"
 git push
-git tag v1.1.5
-git push origin v1.1.5
+git tag v1.1.6
+git push origin v1.1.6
 
 (TAG tigerports-ports at time of release like official macports with same version).
 
 Makefile is in gitignore and we just updated manpages/docs/everything.
 ----------------
 make -C vendor
-make dist DISTVER=1.1.5 DISTKEY=~/Desktop/tigerports-keys/tigerports-base-2026.sec
+make dist DISTVER=1.1.6 DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec

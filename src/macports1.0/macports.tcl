@@ -1583,8 +1583,11 @@ match macports.conf.default."
                     }
                 }
             } else {
-                set build_arch i386
-            }
+                if {$os_arch eq "powerpc"} {
+                    set build_arch ppc
+                } else {
+                    set build_arch i386
+                }            }
         } else {
             switch -glob $tcl_platform(machine) {
                "Power Macintosh" -

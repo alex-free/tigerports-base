@@ -2170,7 +2170,13 @@ proc macports::get_tar_flags {suffix} {
         .tbz2 {
             return -j
         }
+        .bz2 {
+            return -j
+        }
         .tgz {
+            return -z
+        }
+        .gz {
             return -z
         }
         .txz {

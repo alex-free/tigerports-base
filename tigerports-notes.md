@@ -188,10 +188,10 @@ Sets release version number in files.
 ----------------
 rm configure~
 git add .
-git commit -m "v1.1.6"
+git commit -m "v1.1.8"
 git push
-git tag v1.1.6
-git push origin v1.1.6
+git tag v1.1.8
+git push origin v1.1.8
 
 (TAG tigerports-ports at time of release like official macports with same version).
 

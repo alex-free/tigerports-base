@@ -2,9 +2,9 @@
 
 Tigerports is not just a fork of MacPorts. It is a recreation of the entire MacPorts infrastructure that is tailored to our favorite OS. TigerPorts provides:
 
-* [Tiger orientated ports tree](https://github.com/alex-free/tigerports-ports) focused on software that works on Tiger. This is a 'managed snapshot' of my fork of PPCPorts (which tracks upstream) merged with MacPorts Ports tree.
+* [Tiger orientated ports tree](https://github.com/alex-free/tigerports-ports) focused on software that works on Tiger. This is a managed snapshot of my fork of powerpc-ports tigerports branch (which tracks upstream powerpc-ports, and changes are submitted to them as well) merged with the MacPorts Ports tree, creating one unified ports tree for tiger.
 
-* [Tiger orientated base](https://github.com/alex-free/tigerports-base), configured in source to use tigerports.com. This is now a fork of PPCPorts-base tiger_upd branch, with plans for tracking more MacPorts-Base/PPCPorts-Base changes and explicit Intel support.
+* [Tiger orientated base](https://github.com/alex-free/tigerports-base), configured in source to use tigerports.com. This is now a fork of PPCPorts-base tiger_upd branch, with plans for tracking more MacPorts-Base/PPCPorts-Base changes and explicit Intel and PowerPC support.
 
 * [Tiger orientated infrastructure](https://github.com/alex-free/tigerports-infrastructure), allows hosting tigerports.com on a Debian VPS rather then a Mac like MacPorts has it. This includes numerous improvements to the sync scripts, adds binary package signing management, and includes a setup script to recreate my server.
 
@@ -24,23 +24,25 @@ Tigerports is not just a fork of MacPorts. It is a recreation of the entire MacP
 
 * [Usage](#usage)
 
-* [HOW YOU CAN HELP](#how-you-can-help)
-
 * [TODO](#todo)
 
 ## Downloads
 
-### v1.1.7 (8/1/2026)
+### v1.1.8 (8/2/2026)
 
 Changes:
 
-* Fix i386 vs PPC auto-detect for build_arch.
+* Update toolchains and compilers.
 
-* [TigerPorts-1.1.7.tar.bz2](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.bz2) _bzip2 release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.bz2.sig))_
+* Fix get_tar_flags to detect .gz and .bz2, correcting http self update for base fetch.
 
-* [TigerPorts-1.1.7.tar.gz](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.gz) _gzip release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.tar.gz.sig))_
+* Intel toolchain now configured for gcc14/libgcc14. PowerPC is configured for gcc16/libgcc14.
 
-* [TigerPorts-1.1.7.chk.txt](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.7.chk.txt) _cryptographic checksum manifest to verify the integrity of TigerPorts downloads_
+* [TigerPorts-1.1.8.tar.bz2](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.8.tar.bz2) _bzip2 release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.8.tar.bz2.sig))_
+
+* [TigerPorts-1.1.8.tar.gz](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.8.tar.gz) _gzip release tarball ([verification signature](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.8.tar.gz.sig))_
+
+* [TigerPorts-1.1.8.chk.txt](http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-1.1.8.chk.txt) _cryptographic checksum manifest to verify the integrity of TigerPorts downloads_
 
 [Previous versions](http://tigerports.com/macports/distfiles/MacPorts)
 
@@ -70,8 +72,5 @@ _Note:_ just like when installing official MacPorts from source, you'll need to 
 ## TODO
 
 * Implement PKG installers.
-
-* Automatic $PATH setting when building from source (Official MacPorts doesn't do this but we should add it).
-
 
 

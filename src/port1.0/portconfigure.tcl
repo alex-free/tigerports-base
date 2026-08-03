@@ -1296,11 +1296,28 @@ proc portconfigure::get_gcc_compilers {} {
     } else {
         ui_debug "gcc_compilers.tcl not found in ports tree, using built-in selections"
 
-        lappend compilers macports-gcc-14 macports-gcc-13 macports-gcc-12 macports-gcc-11 macports-gcc-10
+        # GCC 16 and 14 on all systems except i386 tiger (GCC14 only) due to:
+        # https://github.com/macos-powerpc/powerpc-ports/issues/187
+        global os.arch
+        if {${os.major} == 8 && ${os.arch} eq "i386"} {
+            lappend compilers macports-gcc-14
+        } else {
+            lappend compilers macports-gcc-16 macports-gcc-14
+        }
 
-        # GCC 9 and older only on OSX10.10 and older
+        # GCC 11 to GCC 13 on OSX10.6+
+        if {${os.major} >= 10 || [option os.platform] ne "darwin"} {
+            lappend compilers macports-gcc-13 macports-gcc-12 macports-gcc-11
+        }
+
+        # GCC 10 on all systems
+        lappend compilers macports-gcc-10
+
+        # GCC 8 and 9 and older on OSX 10.7 to 10.10
+        # GCC 7 or older on OSX 10.6 or older
+        # https://trac.macports.org/ticket/65472
         if {${os.major} < 15} {
-            if {${os.major} >= 10} {
+            if {${os.major} >= 11} {
                 lappend compilers macports-gcc-9 macports-gcc-8
             }
             lappend compilers macports-gcc-7 macports-gcc-6 macports-gcc-5

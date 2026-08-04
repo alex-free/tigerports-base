@@ -1288,7 +1288,7 @@ proc portconfigure::get_clang_compilers {} {
 }
 # utility procedure: get GCC compilers based on os.major
 proc portconfigure::get_gcc_compilers {} {
-    global os.arch os.major porturl
+    global os.major porturl
     set compilers [list]
     set compiler_file [getportresourcepath $porturl "port1.0/compilers/gcc_compilers.tcl"]
     if {[file exists ${compiler_file}]} {
@@ -1296,14 +1296,8 @@ proc portconfigure::get_gcc_compilers {} {
     } else {
         ui_debug "gcc_compilers.tcl not found in ports tree, using built-in selections"
 
-        # GCC 16 and 14 on all systems except i386 tiger (GCC14 only) due to:
-        # https://github.com/macos-powerpc/powerpc-ports/issues/187
-        global os.arch
-        if {${os.major} == 8 && ${os.arch} eq "i386"} {
-            lappend compilers macports-gcc-14
-        } else {
-            lappend compilers macports-gcc-16 macports-gcc-14
-        }
+        # GCC 16 on all systems
+        lappend compilers macports-gcc-16 macports-gcc-14
 
         # GCC 11 to GCC 13 on OSX10.6+
         if {${os.major} >= 10 || [option os.platform] ne "darwin"} {
@@ -1327,6 +1321,7 @@ proc portconfigure::get_gcc_compilers {} {
             lappend compilers macports-gcc-devel
         }
 
+        global os.arch
         if {${os.arch} eq "powerpc"} {
             lappend compilers macports-gcc-powerpc
         }

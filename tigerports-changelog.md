@@ -1,4 +1,8 @@
-v1.1.8
+v1.1.9 - 8/4/2026
+
+* Updated toolchains and compilers to match PowerPC ports upstream. Intel is now at parity with PowerPC at gcc16/libgcc16.
+
+v1.1.8 - 8/2/2026
 
 * Update toolchains and compilers.
 
@@ -6,10 +10,10 @@ v1.1.8
 
 * Intel toolchain now configured for gcc14/libgcc14. PowerPC is configured for gcc16/libgcc16.
 
-v1.1.7
+v1.1.7 - 8/1/2026
 
 * Restore build_arch auto-detect.
 
-v1.1.6
+v1.1.6 - 7/31/2026
 
 * Rebase on tiger_upd PPCPorts-Base branch.

@@ -198,4 +198,4 @@ git push origin v1.1.8
 Makefile is in gitignore and we just updated manpages/docs/everything.
 ----------------
 make -C vendor
-make dist DISTVER=1.1.6 DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec
+make dist DISTVER=1.1.8 DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec

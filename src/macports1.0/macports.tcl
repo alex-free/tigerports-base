@@ -1575,12 +1575,10 @@ match macports.conf.default."
             } elseif {$os_major >= 10} {
                 if {[sysctl hw.cpu64bit_capable] == 1} {
                     set build_arch x86_64
+                } elseif {$os_arch eq "powerpc"} {
+                    set build_arch ppc
                 } else {
-                    if {$os_arch eq "powerpc"} {
-                        set build_arch ppc
-                    } else {
-                        set build_arch i386
-                    }
+                    set build_arch i386
                 }
             } else {
                 if {$os_arch eq "powerpc"} {

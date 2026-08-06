@@ -1585,7 +1585,7 @@ match macports.conf.default."
                     set build_arch ppc
                 } else {
                     set build_arch i386
-                }            
+                }
             }
         } else {
             switch -glob $tcl_platform(machine) {

@@ -1899,7 +1899,7 @@ proc portconfigure::configure_main {args} {
             append_to_environment_value configure "__CFPREFERENCES_AVOID_DAEMON" 1
         }
 
-        # add SDK flags if cross-compiling (or universal on ppc tiger)
+        # add SDK flags if needed
         if {${configure.sdkroot} ne "" && !${compiler.limit_flags}} {
             foreach env_var {CPPFLAGS CFLAGS CXXFLAGS OBJCFLAGS OBJCXXFLAGS} {
                 append_to_environment_value configure $env_var -isysroot${configure.sdkroot}

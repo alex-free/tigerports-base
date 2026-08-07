@@ -1,0 +1,37 @@
+#!/bin/bash
+
+if [[ ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Invalid version argument. Must be in format of X.Y.Z, where X, Y, Z are numbers, i.e. 1.1.9."
+    exit 1
+fi
+
+version="$1"
+echo "Using version: $1"
+
+echo "Updating tigerports-base version in config/macports_version..."
+echo -e "$version\n" > config/macports_version
+cat config/macports_version
+
+echo "Updating tigerports-base version in config/RELEASE_URL..."
+echo -e "https://github.com/alex-free/tigerports-base/releases/tag/v$version\n" > config/RELEASE_URL
+cat config/RELEASE_URL
+
+echo "Building configure and manpages..."
+./autogen.sh
+./standard_configure.sh
+make -C doc/ clean all \
+	ASCIIDOC=/opt/local/bin/asciidoc \
+	XSLTPROC=/opt/local/bin/xsltproc \
+        DOCBOOK_XSL=/opt/local/share/xsl/docbook-xsl-nons/manpages/docbook.xsl
+
+echo "Building release tarballs..."
+rm configure~
+git add .
+git commit -m "v$version"
+git push
+git tag v$version
+git push origin v$version
+
+echo "Building release tarballs..."
+make -C vendor
+make dist DISTVER=$version DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec

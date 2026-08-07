@@ -23,13 +23,11 @@ rm config/mp_version - leftover from darwinports. deleted because we dont suppor
 1.0.0
 
 ----------------
-
 config/RELEASE_URL
 https://github.com/alex-free/tigerports-base/releases/tag/v1.0.0
 
 Used by mprsyncup.
 ----------------
-
 macports-base/doc/macports.conf.in
 # URLs that MacPorts attempts to download to find out whether a new version was
 # released. Multiple values, space-separated; only one of the URLs needs to be
@@ -53,7 +51,6 @@ rsync_server        	tigerports.com
 doc/sources.conf
 #rsync://rsync.macports.org/macports/release/tarballs/ports.tar.gz [default]
 #rsync://tigerports.com/macports/release/tarballs/ports.tar.gz [default]
-# Currently port indexes are not shipped in tarball, so pull from directory.
 rsync://tigerports.com/macports/release/ports/ [default]
 
 ----------------
@@ -78,7 +75,7 @@ portmgr/rsync.repos
     comment = MacPorts rsync "trunk" repository, providing experimental MacPorts sources in svn's trunk/base.
     path = /var/www/html/macports/trunk
 
-Include in rsync.conf, had to edit for linux.
+Include in rsync.conf, had to edit for linux VPS as it includes this in rsync.conf.
 ----------------
 Mk/macports.autoconf.mk.in
 
@@ -115,8 +112,6 @@ sudo port install -N docbook2X docbook-xml docbook-xsl-ns autoconf automake asci
 Dependencies to build.
 ----------------
 open -e tigerports-changelog.md
-open -e index.md
-pandoc index.md -o index.html
 open -e config/macports_version
 open -e config/RELEASE_URL
 ./autogen.sh
@@ -126,6 +121,23 @@ make -C doc/ clean all \
 	ASCIIDOC=/opt/local/bin/asciidoc \
 	XSLTPROC=/opt/local/bin/xsltproc \
         DOCBOOK_XSL=/opt/local/share/xsl/docbook-xsl-nons/manpages/docbook.xsl
+
+
+Sets release version number in files.
+----------------
+rm configure~
+git add .
+git commit -m "v1.1.8"
+git push
+git tag v1.1.8
+git push origin v1.1.8
+
+(TAG tigerports-ports at time of release like official macports with same version).
+
+Makefile is in gitignore and we just updated manpages/docs/everything.
+----------------
+make -C vendor
+make dist DISTVER=1.1.8 DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec
 
 ----------------
 TEST ON LINUX POSSIBLE HERE
@@ -183,19 +195,3 @@ make distclean
             --with-install-user="$(id -un)"
 make 
 make install
-
-Sets release version number in files.
-----------------
-rm configure~
-git add .
-git commit -m "v1.1.8"
-git push
-git tag v1.1.8
-git push origin v1.1.8
-
-(TAG tigerports-ports at time of release like official macports with same version).
-
-Makefile is in gitignore and we just updated manpages/docs/everything.
-----------------
-make -C vendor
-make dist DISTVER=1.1.8 DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec

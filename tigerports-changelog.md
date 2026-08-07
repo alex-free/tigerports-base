@@ -1,4 +1,4 @@
-v1.1.9 - 8/4/2026
+v1.1.9 - 8/7/2026
 
 * Updated toolchains and compilers to match PowerPC ports upstream. Intel is now at parity with PowerPC at gcc16/libgcc16.
 

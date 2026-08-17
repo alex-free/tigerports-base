@@ -1,0 +1,19 @@
+#include <AvailabilityMacros.h>
+// Not available in Tiger.
+#if MAC_OS_X_VERSION_MIN_REQUIRED > 1040
+#include  <libkern/OSCacheControl.h>
+#endif
+
+#if defined(__APPLE__)
+// https://gcc.gnu.org/onlinedocs/gcc-4.2.3/gcc/X86-Built_002din-Functions.html
+// https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/sys_dcache_flush.3.html
+// sys_icache_invalidate and sys_dcache_flush were introduced in Mac OS X 10.5.
+// On Intel, sys_icace_invalidate is a no-op. GCC builtin can be used for dcache.
+#if MAC_OS_X_VERSION_MIN_REQUIRED > 1040
+  __builtin_ia32_clflush(code->code, code->code_size);
+#else
+  sys_dcache_flush(code->code, code->code_size);
+  sys_icache_invalidate(code->exec, code->code_size);
+#endif
+
+:set mouse=i

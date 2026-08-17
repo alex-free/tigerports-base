@@ -86,7 +86,7 @@ proc portconfigure::should_add_stdlib {} {
     }
     # GCC also supports -stdlib starting with GCC 10 (and devel), but
     # not with PPC builds (or i386 builds lower then 10.7)
-    global configure.build_arch
+    global configure.build_arch os.major
     if {[string match *g*-mp-* ${configure.cxx}]
             && ${configure.build_arch} ni {ppc ppc64 i386}
             && ${os.major} >= 11} {

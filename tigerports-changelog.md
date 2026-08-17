@@ -1,3 +1,7 @@
+v1.2.1 - 8/16/2026
+
+* Only apply should_add_stdlib for 10.6 or less.
+
 v1.2.0 - 8/16/2026
 
 * Fixed launchagents on Tiger.

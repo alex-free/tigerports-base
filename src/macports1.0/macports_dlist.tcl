@@ -106,7 +106,7 @@ proc dlist_delete {dlist ditem} {
 	upvar $dlist uplist
 	set ix [lsearch -exact $uplist $ditem]
 	if {$ix >= 0} {
-		set uplist [lreplace ${uplist}[set uplist {}] $ix $ix]
+		lpop uplist $ix
 	}
 }
 
@@ -370,6 +370,7 @@ proc dlist_eval {dlist testcond handler {canfail "0"} {selector "dlist_get_next"
 namespace eval macports_dlist {
 
 variable ditem_uniqid 0
+variable unique [dict create]
 
 proc ditem_create {} {
 	variable ditem_uniqid
@@ -383,6 +384,8 @@ proc ditem_create {} {
 proc ditem_delete {ditem} {
 	variable $ditem
 	unset $ditem
+	variable unique
+	dict unset unique $ditem
 }
 
 proc ditem_key {ditem args} {
@@ -394,11 +397,7 @@ proc ditem_key {ditem args} {
 		return $val
 	} elseif {$nbargs == 1} {
 		set key [lindex $args 0]
-		if {[dict exists [set $ditem] $key]} {
-		    return [dict get [set $ditem] $key]
-		} else {
-		    return {}
-		}
+		return [dict getwithdefault [set $ditem] $key {}]
 	} elseif {[info exists $ditem]} {
 		return [set $ditem]
 	} else {
@@ -414,16 +413,16 @@ proc ditem_append {ditem key args} {
 
 proc ditem_append_unique {ditem key args} {
 	variable $ditem
-	set unique [dict create]
-	if {[dict exists [set $ditem] $key]} {
-	    foreach val [dict get [set $ditem] $key] {
-	        dict set unique $val {}
-	    }
-	}
-	foreach val $args {
-        dict set unique $val {}
+	variable unique
+	if {![dict exists $unique $ditem $key] && [dict exists [set $ditem] $key]} {
+        foreach val [dict get [set $ditem] $key] {
+            dict set unique $ditem $key $val {}
+        }
     }
-    set x [dict keys $unique]
+    foreach val $args {
+        dict set unique $ditem $key $val {}
+    }
+    set x [dict keys [dict get $unique $ditem $key]]
 
 	dict set $ditem $key $x
 	return $x

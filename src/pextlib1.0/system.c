@@ -38,6 +38,8 @@
 #ifndef __APPLE__
 /* required for fdopen(3)/seteuid(2)/getline(3), among others */
 #define _XOPEN_SOURCE 700
+/* initgroups() */
+#define _DEFAULT_SOURCE
 #endif
 
 #include <tcl.h>
@@ -49,7 +51,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <limits.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -120,19 +124,19 @@ static int check_sandboxing(Tcl_Interp *interp, char **sandbox_exec_path, char *
 {
     Tcl_Obj *tcl_result;
     int active;
-    int len;
+    Tcl_Size len;
 
-    tcl_result = Tcl_GetVar2Ex(interp, "portsandbox_active", NULL, TCL_GLOBAL_ONLY);
+    tcl_result = Tcl_GetVar2Ex(interp, "::portsandbox_active", NULL, TCL_GLOBAL_ONLY);
     if (!tcl_result || Tcl_GetBooleanFromObj(interp, tcl_result, &active) != TCL_OK || !active) {
         return 0;
     }
 
-    tcl_result = Tcl_GetVar2Ex(interp, "portutil::autoconf::sandbox_exec_path", NULL, TCL_GLOBAL_ONLY);
+    tcl_result = Tcl_GetVar2Ex(interp, "::portutil::autoconf::sandbox_exec_path", NULL, TCL_GLOBAL_ONLY);
     if (!tcl_result || !(*sandbox_exec_path = Tcl_GetString(tcl_result))) {
         return 0;
     }
 
-    tcl_result = Tcl_GetVar2Ex(interp, "portsandbox_profile", NULL, TCL_GLOBAL_ONLY);
+    tcl_result = Tcl_GetVar2Ex(interp, "::portsandbox_profile", NULL, TCL_GLOBAL_ONLY);
     if (!tcl_result || !(*profilestr = Tcl_GetStringFromObj(tcl_result, &len)) 
         || len == 0) {
         return 0;
@@ -189,10 +193,10 @@ static int SystemCmd_Callback_Append(SystemCmd_Callback *cb, Tcl_Obj *callbackPr
     return Tcl_ListObjAppendElement(cb->interp, cb->procs, callbackProc);
 }
 
-static int SystemCmd_Callback_NumProcs(SystemCmd_Callback *cb)
+static Tcl_Size SystemCmd_Callback_NumProcs(SystemCmd_Callback *cb)
 {
     int status;
-    int len;
+    Tcl_Size len;
 
     if ((status = Tcl_ListObjLength(cb->interp, cb->procs, &len)) != TCL_OK) {
         /* We allocate this explicitly as a list; the type should not change */
@@ -219,10 +223,10 @@ static void SystemCmd_Callback_SetPid(SystemCmd_Callback *cb, pid_t pid)
 static int SystemCmd_Callback_Invoke(SystemCmd_Callback *cb, Tcl_Obj *event)
 {
     Tcl_Obj **procs;
-    int numProcs;
+    Tcl_Size numProcs;
 
     Tcl_ListObjGetElements(cb->interp, cb->procs, &numProcs, &procs);
-    for (int i = 0; i < numProcs; i++) {
+    for (Tcl_Size i = 0; i < numProcs; i++) {
         Tcl_Obj *objv[] = { procs[i], event };
         int status;
 
@@ -442,7 +446,8 @@ int SystemCmd(ClientData clientData UNUSED, Tcl_Interp *interp, int objc, Tcl_Ob
         /* drop privileges entirely for child */
         if (getuid() == 0 && (euid = geteuid()) != 0) {
             gid_t egid = getegid();
-            if (seteuid(0) || setgid(egid) || setuid(euid)) {
+            struct passwd *pwent = getpwuid(euid);
+            if (!pwent || seteuid(0) || setgid(egid) || initgroups(pwent->pw_name, egid) || setuid(euid)) {
                 _exit(1);
             }
         }

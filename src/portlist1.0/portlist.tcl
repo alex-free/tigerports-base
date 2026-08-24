@@ -111,24 +111,15 @@ proc foreachport {portlist block} {
             set variations [dict get $portspec variants]
             set requested_variations [dict get $portspec requested_variants]
             set options [dict get $portspec options]
-            if {[dict exists $portspec metadata]} {
-                set portmetadata [dict get $portspec metadata]
-            } else {
-                set portmetadata ""
-            }
+            set portmetadata [dict getwithdefault $portspec metadata {}]
         }
 
         # Invoke block
         uplevel 1 $block
 
-        # Restore cwd after each port, since mportopen changes it, and otherwise relative
-        # urls would break on subsequent passes
-        if {[file exists $savedir]} {
-            cd $savedir
-        } else {
-            # XXX Tcl9 unsafe
-            cd ~
-        }
+        # Restore cwd after each port, since some operations may change it,
+        # and otherwise relative urls would break on subsequent passes
+        catch {cd $savedir}
     }
 }
 

@@ -47,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #if HAVE_SYS_EVENT_H
 #include <sys/event.h>
 #endif
@@ -84,7 +85,7 @@ static void peerpid_list_walk(bool (*callback)(int sock, pid_t pid, const char *
 #endif /* defined(HAVE_PEERPID_LIST) */
 
 
-static char *name;
+static char *name = NULL;
 static char *sandbox;
 static size_t sandboxLength;
 static char **depends = NULL;
@@ -582,8 +583,8 @@ static void sandbox_violation(int sock UNUSED, const char *path, sandbox_violati
 /**
  * Internal helper function to compare two strings.
  */
-static int pointer_strcmp(const char** a, const char** b) {
-    return strcmp(*a, *b);
+static int pointer_strcasecmp(const char** a, const char** b) {
+    return strcasecmp(*a, *b);
 }
 
 /**
@@ -664,7 +665,7 @@ static void dep_check(int sock, char *path) {
 
     /* check our list of dependencies; use binary search on sorted list */
     if (NULL != bsearch(&port, depends, dependsLength, sizeof(*depends),
-                        (int (*)(const void*, const void*)) pointer_strcmp)) {
+                        (int (*)(const void*, const void*)) pointer_strcasecmp)) {
         free(port);
         /* access granted, cache this result */
         Tcl_HashEntry *cache_entry = Tcl_CreateHashEntry(&path_cache, path, &is_new);
@@ -684,6 +685,11 @@ static void dep_check(int sock, char *path) {
 static int TracelibOpenSocketCmd(Tcl_Interp *in) {
     struct sockaddr_un sun;
 
+    if (name == NULL) {
+        Tcl_SetResult(in, "tracelib opensocket called without first calling tracelib setname", TCL_STATIC);
+        return TCL_ERROR;
+    }
+
     if (-1 == (sock = socket(PF_LOCAL, SOCK_STREAM, 0))) {
         return error2tcl("socket: ", errno, in);
     }
@@ -696,6 +702,12 @@ static int TracelibOpenSocketCmd(Tcl_Interp *in) {
         close(sock);
         sock = -1;
         return error2tcl("bind: ", err, in);
+    }
+
+    if (-1 == chmod(name, 0777)) {
+        /* We create this socket as root, but want non-root users to be able to
+         * connect. */
+        return error2tcl("chmod: ", errno, in);
     }
 
     if (-1 == listen(sock, SOMAXCONN)) {
@@ -1041,7 +1053,7 @@ static int TracelibCloseSocketCmd(Tcl_Interp *interp UNUSED) {
 
 static int TracelibSetDeps(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
     Tcl_Obj **objects;
-    int length;
+    Tcl_Size length;
     if (objc != 3) {
         Tcl_WrongNumArgs(interp, 2, objv, "number of arguments should be exactly 3");
         return TCL_ERROR;
@@ -1061,31 +1073,33 @@ static int TracelibSetDeps(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) 
     depends = NULL;
     dependsLength = 0;
 
-    /* Allocate memory as needed */
-    if (NULL == (depends = malloc(length * sizeof(*depends)))) {
-        Tcl_SetResult(interp, "memory allocation failed", TCL_STATIC);
-        return TCL_ERROR;
-    }
-    /* Copy all objects over */
-    for (int i = 0; i < length; ++i) {
-        if (NULL == (depends[i] = strdup(Tcl_GetString(objects[i])))) {
-            /* Allocation failed, clean up what we have so far */
-            for (int j = 0; j < i; ++j) {
-                free(depends[j]);
-            }
-            free(depends);
-            depends = NULL;
-            dependsLength = 0;
+    if (length > 0) {
+        /* Allocate memory as needed */
+        if (NULL == (depends = malloc(length * sizeof(*depends)))) {
             Tcl_SetResult(interp, "memory allocation failed", TCL_STATIC);
             return TCL_ERROR;
         }
+        /* Copy all objects over */
+        for (Tcl_Size i = 0; i < length; ++i) {
+            if (NULL == (depends[i] = strdup(Tcl_GetString(objects[i])))) {
+                /* Allocation failed, clean up what we have so far */
+                for (Tcl_Size j = 0; j < i; ++j) {
+                    free(depends[j]);
+                }
+                free(depends);
+                depends = NULL;
+                dependsLength = 0;
+                Tcl_SetResult(interp, "memory allocation failed", TCL_STATIC);
+                return TCL_ERROR;
+            }
 
-        dependsLength++;
+            dependsLength++;
+        }
+
+        /* Sort all dependencies so we can use binary searching */
+        qsort(depends, dependsLength, sizeof(*depends),
+              (int (*)(const void*, const void*)) pointer_strcasecmp);
     }
-
-    /* Sort all dependencies so we can use binary searching */
-    qsort(depends, dependsLength, sizeof(*depends),
-          (int (*)(const void*, const void*)) pointer_strcmp);
 
     return TCL_OK;
 }

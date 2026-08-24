@@ -35,7 +35,7 @@ namespace eval portsandbox {
 }
 
 options portsandbox_supported portsandbox_active portsandbox_profile
-default portsandbox_supported {[file executable $portutil::autoconf::sandbox_exec_path]}
+default portsandbox_supported {[file executable $::portutil::autoconf::sandbox_exec_path]}
 default portsandbox_active {[expr {$portsandbox_supported && $sandbox_enable}]}
 default portsandbox_profile {}
 
@@ -80,7 +80,12 @@ proc portsandbox::set_profile {target} {
         }
     }
 
-    lappend allow_dirs $workpath ${portutil::autoconf::trace_sipworkaround_path}
+    lappend allow_dirs $workpath
+    if {[info exists ::env(DARWINTRACE_SIP_WORKAROUND_PATH)]} {
+        lappend allow_dirs $::env(DARWINTRACE_SIP_WORKAROUND_PATH)
+    } else {
+        lappend allow_dirs ${::portutil::autoconf::trace_sipworkaround_path}
+    }
     if {${configure.ccache}} {
         lappend allow_dirs $ccache_dir
     }
@@ -89,7 +94,7 @@ proc portsandbox::set_profile {target} {
         lappend allow_dirs $portdbpath/home/Library/Developer/Xcode \
                            $portdbpath/home/Library/Caches \
                            $portdbpath/home/Library/org.swift.swiftpm \
-                           $portdbpath/home/.swiftpm \
+                           $portdbpath/home/.swiftpm
         # explicitly whitelist source dir to work around problems building
         # Xcode projects in-source
         lappend allow_dirs $worksrcpath
@@ -132,6 +137,12 @@ proc portsandbox::set_profile {target} {
     }
 
     foreach dir $allow_dirs {
+        set normdir [file normalize $dir]
+        if {$dir ne $normdir} {
+            lappend allow_dirs $normdir
+        }
+    }
+    foreach dir $allow_dirs {
         foreach perm $perms {
             append portsandbox_profile " (allow $perm ("
             if {${os.major} > 9} {
@@ -150,16 +161,15 @@ proc portsandbox::set_profile {target} {
                 append portsandbox_profile " (deny network*)"
                 if {$porttrace} {
                     # allow accessing the darwintrace fifo in trace mode
-                    set template [string trimright ${porttrace::fifo_mktemp_template} "X"]
+                    set template [string trimright ${::porttrace::fifo_mktemp_template} "X"]
                     append portsandbox_profile " (allow network-outbound (to unix-socket) (regex #\"^${template}\"))"
                 }
             }
         }
     }
 
-    if {${build.type} eq "xcode"} {
+    if {${os.major} >= 10 && ${build.type} eq "xcode"} {
         # let Xcode create jobs (FIXME: narrow allowed commands)
-        append portsandbox_profile "\
-(allow job-creation)"
+        append portsandbox_profile " (allow job-creation)"
     }
 }

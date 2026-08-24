@@ -1,5 +1,4 @@
-# et:ts=4
-# portextract.tcl
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
 #
 # Copyright (c) 2005, 2007-2011, 2013-2014, 2016, 2018 The MacPorts Project
 # Copyright (c) 2002 - 2003 Apple Inc.
@@ -29,152 +28,167 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
-#
 
 package provide portextract 1.0
-package require portutil 1.0
 
 set org.macports.extract [target_new org.macports.extract portextract::extract_main]
 target_provides ${org.macports.extract} extract
 target_requires ${org.macports.extract} main fetch checksum
 target_prerun ${org.macports.extract} portextract::extract_start
+target_runpkg ${org.macports.extract} portextract_run
 
 namespace eval portextract {
+    variable all_use_options [list use_7z use_bzip2 use_dmg use_lzip use_lzma use_tar use_xz use_zip]
+    variable default_suffix_map [dict create use_bzip2 .tar.bz2 use_lzma .tar.lzma use_tar .tar \
+        use_xz .tar.xz use_zip .zip use_7z .7z use_lzip .tar.lz use_dmg .dmg]
+    variable dmg_mount {/tmp/mports.XXXXXXXX}
 }
 
 # define options
-options extract.only extract.mkdir extract.rename extract.asroot
+options extract.only extract.mkdir extract.rename extract.suffix extract.asroot \
+        {*}${portextract::all_use_options} extract.methods extract.add_deps
 commands extract
 
 # Set up defaults
 default extract.asroot no
-# XXX call out to code in portutil.tcl XXX
 # This cleans the distfiles list of all site tags
 default extract.only {[portextract::disttagclean $distfiles]}
 
 default extract.dir {${workpath}}
-default extract.cmd {[findBinary gzip ${portutil::autoconf::gzip_path}]}
-default extract.pre_args -dc
-default extract.post_args {| ${portutil::autoconf::tar_command} -xf -}
+default extract.cmd {[portextract::get_extract_cmd [portextract::method_for_suffix ${extract.suffix}]]}
+default extract.pre_args {[portextract::get_extract_pre_args [portextract::method_for_suffix ${extract.suffix}]]}
+default extract.post_args {[portextract::get_extract_post_args [portextract::method_for_suffix ${extract.suffix}]]}
+default extract.suffix .tar.gz
+default extract.methods {}
 default extract.mkdir no
 default extract.rename no
+default extract.add_deps yes
 
-set_ui_prefix
+foreach _extract_use_option ${portextract::all_use_options} {
+    option_proc ${_extract_use_option} portextract::set_extract_type
+}
+unset _extract_use_option
 
-# XXX
-# Helper function for portextract.tcl that strips all tag names from a list
+proc portextract::get_extract_post_args {method} {
+    switch $method {
+        bzip2 -
+        gzip -
+        lzip -
+        lzma -
+        xz -
+        zstd {
+            return "| ${::portutil::autoconf::tar_command} -xf -"
+        }
+        zip {
+            global extract.dir
+            return "-d [shellescape ${extract.dir}]"
+        }
+        7z -
+        tar {
+            return {}
+        }
+        dmg {
+            global distname extract.dir
+            variable dmg_mount
+            return "-private -readonly -nobrowse -mountpoint [shellescape ${dmg_mount}] && cd [shellescape ${dmg_mount}] && [findBinary find ${::portutil::autoconf::find_path}] . -depth -perm -+r -print0 | [findBinary cpio ${::portutil::autoconf::cpio_path}] -0 -p -d -m -u [shellescape ${extract.dir}/${distname}]; status=\$?; cd / && [get_extract_cmd $method] detach [shellescape ${dmg_mount}] && [findBinary rmdir ${::portutil::autoconf::rmdir_path}] [shellescape ${dmg_mount}]; exit \$status"
+        }
+    }
+    return {}
+}
+
+proc portextract::set_extract_type {option action args} {
+    # Make the use_* options act like radio buttons - if one is turned
+    # on, all the others turn off.
+    if {${action} in {set delete}} {
+        variable all_use_options
+        global {*}$all_use_options extract.suffix
+        if {${action} eq "set" && [string is true -strict $args]} {
+            foreach opt $all_use_options {
+                if {$opt ne $option} {
+                    unset -nocomplain $opt
+                }
+            }
+            variable default_suffix_map
+            default extract.suffix [dict get $default_suffix_map $option]
+        } else {
+            # restore default extract.suffix if all use_* options are unset
+            foreach opt $all_use_options {
+                if {[tbool $opt]} {
+                    set any_on 1
+                    break
+                }
+            }
+            if {![info exists any_on]} {
+                default extract.suffix .tar.gz
+            }
+        }
+    }
+}
+
+proc portextract::find_methods {} {
+    variable methods_used
+    if {[info exists methods_used]} {
+        return
+    }
+    global extract.only extract.methods
+    set methods_used [dict create]
+    # record a deduplicated set of extract methods used
+    foreach distfile ${extract.only} {
+        if {[dict exists ${extract.methods} $distfile]} {
+            dict set methods_used [dict get ${extract.methods} $distfile] 1
+        } else {
+            dict set methods_used [method_for_suffix $distfile] 1
+        }
+    }
+}
+port::register_callback portextract::find_methods
+
+proc portextract::add_extract_deps {} {
+    global depends_extract extract.add_deps
+    if {!${extract.add_deps}} {
+        return
+    }
+    variable methods_used
+    if {![info exists methods_used]} {
+        find_methods
+    }
+    # add deps for each method
+    foreach method [dict keys $methods_used] {
+        set depspec {}
+        switch $method {
+            bzip2 {
+                if {![catch {findBinary lbzip2}]} {
+                    set depspec bin:lbzip2:lbzip2
+                }
+            }
+            xz {
+                set depspec bin:xz:xz
+            }
+            zip {
+                set depspec bin:unzip:unzip
+            }
+            zstd {
+                set depspec bin:zstd:zstd
+            }
+            lzip {
+                set depspec bin:lzip:lzip
+            }
+            lzma {
+                set depspec bin:lzma:xz
+            }
+            7z {
+                set depspec bin:7za:p7zip
+            }
+        }
+        if {$depspec ne {} && (![info exists depends_extract] || $depspec ni $depends_extract)} {
+            depends_extract-append $depspec
+        }
+    }
+}
+port::register_callback portextract::add_extract_deps
+
+# Helper function that strips all tag names from a list
 # Used to clean ${distfiles} for setting the ${extract.only} default
 proc portextract::disttagclean {list} {
-    if {$list eq ""} {
-        return $list
-    }
-    foreach name $list {
-        lappend val [getdistname $name]
-    }
-    return $val
-}
-
-proc portextract::extract_start {args} {
-    global UI_PREFIX extract.dir extract.mkdir use_tar use_bzip2 use_lzma use_xz use_zip use_7z use_lzip use_dmg
-
-    ui_notice "$UI_PREFIX [format [msgcat::mc "Extracting %s"] [option subport]]"
-
-    # create any users and groups needed by the port
-    handle_add_users
-
-    # should the distfiles be extracted to worksrcpath instead?
-    if {[tbool extract.mkdir]} {
-        global worksrcpath
-        ui_debug "Extracting to subdirectory worksrcdir"
-        file mkdir ${worksrcpath}
-        set extract.dir ${worksrcpath}
-    }
-    if {[tbool use_tar]} {
-        option extract.cmd [findBinary tar ${portutil::autoconf::tar_command}]
-        option extract.pre_args -xf
-        option extract.post_args ""
-    } elseif {[tbool use_bzip2]} {
-        if {![catch {findBinary lbzip2} result]} {
-            option extract.cmd $result
-        } else {
-            option extract.cmd [findBinary bzip2 ${portutil::autoconf::bzip2_path}]
-        }
-    } elseif {[tbool use_lzma]} {
-        option extract.cmd [findBinary lzma ${portutil::autoconf::lzma_path}]
-    } elseif {[tbool use_xz]} {
-        option extract.cmd [findBinary xz ${portutil::autoconf::xz_path}]
-    } elseif {[tbool use_zip]} {
-        option extract.cmd [findBinary unzip ${portutil::autoconf::unzip_path}]
-        option extract.pre_args -q
-        option extract.post_args "-d ${extract.dir}"
-    } elseif {[tbool use_7z]} {
-        option extract.cmd [binaryInPath "7za"]
-        option extract.pre_args x
-        option extract.post_args ""
-    } elseif {[tbool use_lzip]} {
-        option extract.cmd [binaryInPath "lzip"]
-        option extract.pre_args "-dc"
-        #option extract.post_args ""
-    } elseif {[tbool use_dmg]} {
-        global distname extract.cmd
-        set dmg_mount [mkdtemp "/tmp/mports.XXXXXXXX"]
-        option extract.cmd [findBinary hdiutil ${portutil::autoconf::hdiutil_path}]
-        option extract.pre_args attach
-        option extract.post_args "-private -readonly -nobrowse -mountpoint \\\"${dmg_mount}\\\" && cd \\\"${dmg_mount}\\\" && [findBinary find ${portutil::autoconf::find_path}] . -depth -perm -+r -print0 | [findBinary cpio ${portutil::autoconf::cpio_path}] -0 -p -d -m -u \\\"${extract.dir}/${distname}\\\"; status=\$?; cd / && ${extract.cmd} detach \\\"${dmg_mount}\\\" && [findBinary rmdir ${portutil::autoconf::rmdir_path}] \\\"${dmg_mount}\\\"; exit \$status"
-    }
-}
-
-proc portextract::extract_main {args} {
-    global UI_PREFIX filespath extract.dir use_dmg
-
-    if {![exists distfiles] && ![exists extract.only]} {
-        # nothing to do
-        return 0
-    }
-
-    foreach distfile [option extract.only] {
-        ui_info "$UI_PREFIX [format [msgcat::mc "Extracting %s"] $distfile]"
-        if {[file exists $filespath/$distfile]} {
-            option extract.args "'$filespath/$distfile'"
-        } else {
-            option extract.args "'[option distpath]/$distfile'"
-        }
-
-        # If the MacPorts user does not have the privileges to mount a
-        # DMG then hdiutil will fail with this error:
-        #   hdiutil: attach failed - Device not configured
-        # So elevate back to root.
-        if {[tbool use_dmg]} {
-            elevateToRoot {extract dmg}
-        }
-        set code [catch {command_exec extract} result]
-        if {[tbool use_dmg]} {
-            dropPrivileges
-        }
-        if {$code} {
-            return -code error "$result"
-        }
-
-        chownAsRoot ${extract.dir}
-    }
-
-    if {[option extract.rename] && ![file exists [option worksrcpath]]} {
-        global workpath distname
-        # rename whatever directory exists in $workpath to $distname
-        set worksubdirs [glob -nocomplain -types d -directory $workpath *]
-        if {[llength $worksubdirs] == 1} {
-            set origpath [lindex $worksubdirs 0]
-            set newpath [file join $workpath $distname]
-            if {$newpath ne $origpath} {
-                ui_debug [format [msgcat::mc "extract.rename: Renaming %s -> %s"] [file tail $origpath] $distname]
-                move $origpath $newpath
-            }
-        } elseif {[llength $worksubdirs] == 0} {
-            return -code error "extract.rename: no directories exist in $workpath"
-        } else {
-            return -code error "extract.rename: multiple directories exist in ${workpath}: $worksubdirs"
-        }
-    }
-
-    return 0
+    return [lmap fname $list {getdistname $fname}]
 }

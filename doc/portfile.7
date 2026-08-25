@@ -321,7 +321,7 @@ List of checksums for the
 .Ic distfiles .
 The checksum
 .Ar type
-can currently be md5, sha1, rmd160, sha256 or size.
+can currently be md5, sha1, rmd160, sha256, blake3 or size.
 The
 .Ar filename
 can be omitted if there is only one distfile.
@@ -1135,6 +1135,16 @@ Whether to ignore the host SSL certificate (for HTTPS).
 .br
 .Sy Default:
 .Em no
+.br
+.It Ic fetch.user_agent
+HTTP User-Agent to use when fetching the resource.
+Useful for servers that block requests from the default curl user agent.
+.br
+.Sy Type:
+.Em optional
+.br
+.Sy Default:
+.Em \&""
 .br
 .El
 .Ss FETCHING FROM CVS
@@ -2281,6 +2291,15 @@ md5 sum to use for md5 comparison.
 .br
 .Sy Type:
 .Em optional
+.It Ic livecheck.user_agent
+HTTP User-Agent to use when fetching the livecheck resource.
+Useful for servers that block requests from the default curl user agent.
+.br
+.Sy Type:
+.Em optional
+.br
+.Sy Default:
+.Em \&""
 .El
 .Sh VARIANT OPTIONS
 MacPorts allows for conditional modification to be specified in a

@@ -7,6 +7,8 @@ INSTALL_SUBDIR=		install
 
 DESTROOT=			@abs_top_builddir@/@VENDOR_DESTROOT@
 TCL_PREFIX=			@TCL_PREFIX@
+INSTALL=			@INSTALL@
+TCL_INSTALL_D_ARG=	INSTALL_DATA_DIR="@abs_top_builddir@/vendor/tcl/unix/install-sh -d -m 755"
 
 .PHONY: all clean distclean install destroot test
 .PHONY: destroot-tcl destroot-critcl destroot-tclx destroot-tcllib destroot-tcllibc destroot-signify destroot-install
@@ -53,6 +55,10 @@ DESTROOT_TARGETS+=   destroot-install
 CLEAN_TARGETS+= clean-install
 DISTCLEAN_TARGETS+= distclean-install
 CODESIGN_TARGETS+= install/build/install
+TCL_INSTALL_D_ARG=
+all-tcl: all-install
+all-tclx: all-install
+destroot-signify: all-install
 endif
 endif
 ifeq (@OS_PLATFORM@,darwin)
@@ -62,7 +68,7 @@ endif
 destroot: $(DESTROOT_TARGETS)
 destroot-tcl: all-tcl
 	@echo ===\> staging to destroot in ${DIRPRFX}@VENDOR_TCL_SUBDIR@
-	@umask 0022; "$(MAKE)" -C "@VENDOR_TCL_SUBDIR@" "DESTDIR=${DESTROOT}" @VENDOR_TCL_INSTALL@
+	@umask 0022; "$(MAKE)" -C "@VENDOR_TCL_SUBDIR@" "DESTDIR=$(DESTROOT)" "INSTALL=$(INSTALL)" $(TCL_INSTALL_D_ARG) @VENDOR_TCL_INSTALL@
 	[ "@OS_PLATFORM@" != darwin ] || install_name_tool -change "$(TCL_PREFIX)/lib/libtcl@TCL_VERSION@.dylib" \
 	    "@executable_path/../lib/libtcl@TCL_VERSION@.dylib" \
 	    "$(DESTROOT)$(TCL_PREFIX)/bin/tclsh@TCL_VERSION@"
@@ -77,9 +83,14 @@ destroot-tcllib: destroot-tcl
 	@umask 0022; "$(MAKE)" -C "@VENDOR_TCLLIB_SUBDIR@" "DESTDIR=${DESTROOT}" TCLSH_PROG="@INTREE_TCLSH@" @VENDOR_TCLLIB_INSTALL@
 	@chmod -R ugo+rX $(DESTROOT)$(TCL_PREFIX)/lib/tcllib*
 
+# The unusual values for --prefix and --dest-dir are because critcl's
+# build system internally normalizes the prefix, which means the
+# directory structure in the destroot would be different and prevent us
+# from finding its files in other steps unless we also normalized,
+# which is difficult on older macOS versions.
 .stamp-critcl: $(CRITCL_SUBDIR)/lib/critcl/critcl.tcl | destroot-tcl
 	@echo ===\> staging to destroot in ${DIRPRFX}${CRITCL_SUBDIR}
-	@umask 0022; cd "$(CRITCL_SUBDIR)" && /usr/bin/env "HOME=@abs_top_builddir@/vendor" "@INTREE_TCLSH@" ./build.tcl install --prefix "$(TCL_PREFIX)" --dest-dir "$(DESTROOT)" $(CRITCL_TARGET)
+	@umask 0022; cd "$(CRITCL_SUBDIR)" && /usr/bin/env "HOME=@abs_top_builddir@/vendor" "@INTREE_TCLSH@" ./build.tcl install --prefix / --dest-dir "$(DESTROOT)$(TCL_PREFIX)" $(CRITCL_TARGET)
 	@chmod -R ugo+rX $(DESTROOT)$(TCL_PREFIX)/lib/critcl*
 	@touch .stamp-critcl
 
@@ -119,26 +130,27 @@ OLD_TCL_FILES=	$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.4/http-2.7.1{2,3}.tm \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.4/platform-1.0.1{2,3,4,8}.tm \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.5/msgcat-1.5.2.tm \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.5/tcltest-2.3.{5,8}.tm \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.5/tcltest-2.5.{3,5,7,8}.tm \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.6/tdbc/sqlite3-1.1.{3,5,7,9}.tm \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.6/tdbc/sqlite3-1.1.9.uuid \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.5/tcltest-2.5.{3,5,7,8,9}.tm \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.6/tdbc/sqlite3-1.1.{3,5,7,9,10}.tm \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8/8.6/tdbc/sqlite3-1.1.{9,10}.uuid \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/tcl8.5 \
 				$(DESTDIR)$(TCL_PREFIX)/bin/tclsh8.5 \
 				$(DESTDIR)$(TCL_PREFIX)/lib/libtcl8.5@SHLIB_SUFFIX@ \
 				$(DESTDIR)$(TCL_PREFIX)/lib/libtclstub8.5.a \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/thread2.7.{0,2,3} \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/thread2.8.{7,8,9,10} \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/thread2.8.{7,8,9,10,11} \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/itcl4.2.{2,3,4} \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/itcl4.3.0 \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/itcl4.3.{0,2} \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/sqlite3.{36,40}.0 \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/sqlite3.44.2 \
 				$(DESTDIR)$(TCL_PACKAGE_PATH)/sqlite3.45.3 \
-				$(DESTDIR)$(TCL_PACKAGE_PATH)/tdbc{,mysql,odbc,postgres}1.1.{3,5,7,9}
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/sqlite3.47.2 \
+				$(DESTDIR)$(TCL_PACKAGE_PATH)/tdbc{,mysql,odbc,postgres}1.1.{3,5,7,9,10}
 
 install-tcl:
 	rm -rf $(OLD_TCL_FILES)
 	@echo ===\> making $(@:%-tcl=%) in ${DIRPRFX}@VENDOR_TCL_SUBDIR@
-	@umask 0022; "$(MAKE)" -C "@VENDOR_TCL_SUBDIR@" @VENDOR_TCL_INSTALL@
+	@umask 0022; "$(MAKE)" -C "@VENDOR_TCL_SUBDIR@" "INSTALL=$(INSTALL)" @VENDOR_TCL_INSTALL@
 
 install-tclx:
 	rm -rf "$(DESTDIR)$(TCL_PACKAGE_PATH)/tclx8.4"
@@ -158,7 +170,7 @@ install-tcllibc:
 	        mkdir -p "$(DESTDIR)$(TCL_PREFIX)/lib/$$d"; \
 	    done; \
 	    for f in $$(find tcllibc* -type f); do \
-	        cp -p "$$f" "$(DESTDIR)$(TCL_PREFIX)/lib/$$f"; \
+	        $(INSTALL) -m 0444 "$$f" "$(DESTDIR)$(TCL_PREFIX)/lib/$$f"; \
 	    done
 	@chmod -R ugo+rX $(DESTDIR)$(TCL_PREFIX)/lib/tcllibc*
 

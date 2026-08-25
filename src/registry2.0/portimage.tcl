@@ -434,13 +434,8 @@ proc extract_archive_to_imagedir {location} {
     } else {
         file mkdir $extractdir
     }
-    set startpwd [pwd]
 
     try {
-        if {[catch {cd $extractdir} err]} {
-            throw MACPORTS $err
-        }
-
         # clagged straight from unarchive... this really needs to be factored
         # out, but it's a little tricky as the places where it's used run in
         # different interpreter contexts with access to different packages.
@@ -497,11 +492,15 @@ proc extract_archive_to_imagedir {location} {
                 # The system bsdtar on 10.15 suffers from https://github.com/libarchive/libarchive/issues/497
                 # Later versions fixed that problem but another remains: https://github.com/libarchive/libarchive/issues/1415 
                 global macports::hfscompression
-                if {${hfscompression} && [getuid] == 0 &&
-                        ![catch {macports::binaryInPath bsdtar}] &&
-                        ![catch {exec bsdtar -x --hfsCompression < /dev/null >& /dev/null}]} {
-                    ui_debug "Using bsdtar with HFS+ compression (if valid)"
-                    set unarchive.cmd "bsdtar"
+                if {${hfscompression} && [getuid] == 0} {
+                    ui_debug "Checking for bsdtar supporting HFS+ compression"
+                    set unarchive.cmd [macports::find_tar_with_hfscompression]
+                    if {${unarchive.cmd} eq {}} {
+                        ui_debug "No bsdtar supporting HFS+ compression found"
+                    }
+                }
+                if {${unarchive.cmd} ne {}} {
+                    ui_debug "Using ${unarchive.cmd}"
                     set unarchive.pre_args {-xvp --hfsCompression -f}
                 } else {
                     set tar "tar"
@@ -586,12 +585,10 @@ proc extract_archive_to_imagedir {location} {
         } else {
             set cmdstring "${unarchive.pipe_cmd} ( ${unarchive.cmd} ${unarchive.pre_args} ${unarchive.args} )"
         }
-        system -callback portimage::_extract_progress $cmdstring
+        system -W $extractdir -callback portimage::_extract_progress $cmdstring
     } on error {_ eOptions} {
         ::file delete -force $extractdir
         throw [dict get $eOptions -errorcode] [dict get $eOptions -errorinfo]
-    } finally {
-        cd $startpwd
     }
 
     return $extractdir

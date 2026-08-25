@@ -91,6 +91,7 @@
 #include "sha1cmd.h"
 #include "rmd160cmd.h"
 #include "sha256cmd.h"
+#include "blake3cmd.h"
 #include "fs-traverse.h"
 #include "filemap.h"
 #include "curl.h"
@@ -107,6 +108,7 @@
 #include "system.h"
 #include "mktemp.h"
 #include "realpath.h"
+#include "time_connect.h"
 
 #if HAVE_CRT_EXTERNS_H
 #include <crt_externs.h>
@@ -1200,8 +1202,11 @@ static int fileIsSparseCmd(ClientData clientData UNUSED, Tcl_Interp *interp, int
 
 int Pextlib_Init(Tcl_Interp *interp)
 {
-    if (Tcl_InitStubs(interp, "8.4", 0) == NULL)
+    if (Tcl_InitStubs(interp, "8.6-", 0) == NULL)
         return TCL_ERROR;
+
+    Tcl_CreateNamespace(interp, "::pextlib", NULL, NULL);
+    Tcl_CreateNamespace(interp, "::pextlib::curl", NULL, NULL);
 
 	Tcl_CreateObjCommand(interp, "system", SystemCmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "adv-flock", AdvFlockCmd, NULL, NULL);
@@ -1222,6 +1227,7 @@ int Pextlib_Init(Tcl_Interp *interp)
 	Tcl_CreateObjCommand(interp, "rmd160", RMD160Cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "sha256", SHA256Cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "sha1", SHA1Cmd, NULL, NULL);
+	Tcl_CreateObjCommand(interp, "blake3", BLAKE3Cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "umask", UmaskCmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "pipe", PipeCmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, "curl", CurlCmd, NULL, NULL);
@@ -1262,6 +1268,8 @@ int Pextlib_Init(Tcl_Interp *interp)
     Tcl_CreateObjCommand(interp, "fs_case_sensitive", FSCaseSensitiveCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "fs_clone_capable", FSCloneCapableCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "clonefile", ClonefileCmd, NULL, NULL);
+
+    Tcl_CreateObjCommand(interp, "time_connect", TimeConnectCmd, NULL, NULL);
 
     if (Tcl_PkgProvide(interp, "Pextlib", "1.0") != TCL_OK)
         return TCL_ERROR;

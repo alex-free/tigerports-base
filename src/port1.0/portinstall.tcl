@@ -291,13 +291,8 @@ proc portinstall::install_main {args} {
     variable cxx_stdlib_overridden
     variable installPlist
 
-    set oldpwd [pwd]
-    if {$oldpwd eq ""} {
-        set oldpwd $portpath
-    }
-
     set location [get_portimage_path]
-    set archive_path [find_portarchive_path]
+    set archive_path [find_portarchive_path 0]
     if {$archive_path ne ""} {
         set install_dir [file dirname $location]
         file mkdir $install_dir
@@ -395,6 +390,5 @@ proc portinstall::install_main {args} {
 
     registry_install $regref
 
-    _cd $oldpwd
     return 0
 }

@@ -100,7 +100,12 @@ proc portmpkg::get_dependencies {mport dep_map base_options variations} {
             lassign $res depname dep_portinfo
             set add_deps 0
             if {[dict exists $dep_map $depname]} {
-                set dep_mport [dict get $dep_map $depname]
+                set dep_map_entry [dict get $dep_map $depname]
+                if {$dep_map_entry eq {}} {
+                    ui_debug "Circular dependency involving $depname"
+                    continue
+                }
+                set dep_mport [lindex $dep_map_entry 0]
                 # The dep has already been processed, so there's
                 # nothing to do in this case if the archs match.
             } else {
@@ -255,7 +260,7 @@ proc portmpkg::write_distribution {dfile portname dependencies} {
     # TODO: Set hostArchitectures. This requires calculating the intersection
     # of the archs of all the component pkgs.
     global macosx_deployment_target
-    set portname [xml_escape $portname]
+    set portname [portpkg::xml_escape $portname]
     set dfd [open $dfile w+]
     puts $dfd "<?xml version=\"1.0\" encoding=\"utf-8\"?>
 <installer-gui-script minSpecVersion=\"1\">
@@ -273,8 +278,8 @@ proc portmpkg::write_distribution {dfile portname dependencies} {
     <choice id=\"org.macports.mpkg.${portname}\" visible=\"false\">
 "
     foreach {identifier package} $dependencies {
-        set id [xml_escape $identifier]
-        set pkg [xml_escape $package]
+        set id [portpkg::xml_escape $identifier]
+        set pkg [portpkg::xml_escape $package]
         puts $dfd "        <pkg-ref id=\"${id}\"/>"
         lappend pkgrefs "<pkg-ref id=\"${id}\">${pkg}</pkg-ref>"
     }
@@ -286,13 +291,6 @@ proc portmpkg::write_distribution {dfile portname dependencies} {
     close $dfd
 }
 
-proc portmpkg::xml_escape {s} {
-    regsub -all {&} $s {\&amp;} s
-    regsub -all {<} $s {\&lt;} s
-    regsub -all {>} $s {\&gt;} s
-    return $s
-}
-
 proc portmpkg::mpkg_write_info_plist {infofile portname portversion portrevision destination dependencies} {
     set vers [split $portversion "."]
 
@@ -302,7 +300,7 @@ proc portmpkg::mpkg_write_info_plist {infofile portname portversion portrevision
 
     set depxml ""
     foreach dep $dependencies {
-        set dep [xml_escape $dep]
+        set dep [portpkg::xml_escape $dep]
         append depxml "<dict>
             <key>IFPkgFlagPackageLocation</key>
             <string>${dep}</string>
@@ -312,9 +310,9 @@ proc portmpkg::mpkg_write_info_plist {infofile portname portversion portrevision
         "
     }
 
-    set portname [xml_escape $portname]
-    set portversion [xml_escape $portversion]
-    set portrevision [xml_escape $portrevision]
+    set portname [portpkg::xml_escape $portname]
+    set portversion [portpkg::xml_escape $portversion]
+    set portrevision [portpkg::xml_escape $portrevision]
 
     set infofd [open ${infofile} w+]
     puts $infofd {<?xml version="1.0" encoding="UTF-8"?>

@@ -44,6 +44,7 @@ namespace eval portconfigure {
     # configure_get_default_compiler is fairly expensive, so cache the result
     variable recompute_default_compiler 1
     variable cached_default_compiler {}
+    variable no_default_compiler_allowed 0
 }
 
 
@@ -402,6 +403,10 @@ proc portconfigure::configure_start {args} {
     }
     ui_debug "Preferred compilers: ${compiler.fallback}"
     ui_debug "Using compiler '$compiler_name'"
+    variable no_default_compiler_allowed
+    if {$no_default_compiler_allowed} {
+        ui_warn_once no_default_compiler_allowed "All compilers are either blacklisted or unavailable; defaulting to first fallback option"
+    }
 
     # Additional ccache directory setup
     if {${configure.ccache}} {
@@ -552,7 +557,12 @@ proc portconfigure::find_close_sdk {sdk_version sdk_path} {
 
 proc portconfigure::configure_get_sdkroot {sdk_version} {
     global developer_dir macos_version macos_version_major xcodeversion \
-           os.arch os.major os.platform use_xcode
+           os.arch os.major os.platform use_xcode system_options
+
+    # Explicit override value
+    if {[info exists system_options(macosx_sdk_path)]} {
+        return $system_options(macosx_sdk_path)
+    }
 
     # This is only relevant for macOS
     if {${os.platform} ne "darwin"} {
@@ -791,6 +801,7 @@ proc portconfigure::configure_get_default_compiler {} {
         return $cached_default_compiler
     }
     set recompute_default_compiler 0
+    variable no_default_compiler_allowed 0
 
     global compiler.blacklist compiler.fallback compiler.whitelist
     if {${compiler.whitelist} ne ""} {
@@ -832,7 +843,9 @@ proc portconfigure::configure_get_default_compiler {} {
             return $compiler
         }
     }
-    ui_warn "All compilers are either blacklisted or unavailable; defaulting to first fallback option"
+    # Default to first compiler in the fallback list, and set a flag
+    # so that a warning can be printed at an appropriate time.
+    set no_default_compiler_allowed 1
     set cached_default_compiler [lindex ${compiler.fallback} 0]
     return $cached_default_compiler
 }

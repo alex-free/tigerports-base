@@ -144,7 +144,7 @@ universal_archs
 # released. Multiple values, space-separated; only one of the URLs needs to be
 # available. Downloads will be attempted in the specified order.
 #release_version_urls https://raw.githubusercontent.com/macports/macports-base/master/config/RELEASE_URL \
-#                     https://trac.macports.org/export/HEAD/macports-base/config/RELEASE_URL \
+#                     https://trac.macports.org/export/master/macports-base/config/RELEASE_URL \
 #                     https://distfiles.macports.org/MacPorts/RELEASE_URL
 # SSL too old for github.
 #release_version_urls https://raw.githubusercontent.com/alex-free/tigerports-base/master/config/RELEASE_URL
@@ -249,6 +249,10 @@ rsync_server        	tigerports.com
 # overriding the usual ping time checks. These have no default values.
 #host_blacklist      	badhost1 badhost2
 #preferred_hosts     	preferredhost1 preferredhost2 *.de.*.macports.org
+
+# Maximum number of downloads to run simultaneously in the background.
+# Set to 0 to disable background downloading.
+#fetch_threads          2
 
 # Whether MacPorts should automatically run rev-upgrade after upgrading
 # ports.

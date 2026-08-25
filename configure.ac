@@ -102,10 +102,19 @@ esac
 
 # Checks for programs.
 AC_PROG_CC([clang cc gcc])
+# Remove automatically added C standard option
+AC_MSG_CHECKING([CC without -std])
+[CC=$(echo "$CC" | sed -E "s/[[:space:]]+-std=(gnu|c)$(echo "$ac_prog_cc_stdc" | tr -d c)//")]
+AC_MSG_RESULT([$CC])
 AC_PROG_GREP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
+
+# Save this for use at runtime. We may use a different install program
+# to install our own files.
+SYSTEM_INSTALL="$INSTALL"
+AC_SUBST(SYSTEM_INSTALL)
 
 # Check for user-supplied paths before searching
 
@@ -117,6 +126,7 @@ dnl named with a _BIN suffix here.
 MP_TOOL_PATH(BSDMAKE, [bsdmake/pmake])
 MP_TOOL_PATH(BZIP2_BIN, [bzip2])
 MP_TOOL_PATH(CVS, [cvs])
+MP_TOOL_PATH(GIT, [git])
 MP_TOOL_PATH(GNUMAKE, [gnumake])
 MP_TOOL_PATH(GNUTAR, [gnutar])
 MP_TOOL_PATH(LZMA, [lzma])
@@ -184,6 +194,7 @@ if test "x$MTREE" = "x"; then
 fi
 
 MP_TAR_FAST_READ
+MP_TAR_KEEP_OLD
 MP_TAR_NO_SAME_OWNER
 MP_PATCH_GNU_VERSION
 
@@ -217,6 +228,7 @@ MP_PATH_MPCONFIGDIR
 
 # Check whether to install without root privileges
 MP_CHECK_NOROOTPRIVILEGES
+AC_SUBST(NO_ROOTPRIVS)
 
 # Check for install ownership
 MP_CHECK_INSTALLUSER
@@ -272,6 +284,8 @@ AC_SUBST(HAVE_CLONEFILE, $ac_cv_func_clonefile)
 AC_SUBST(HAVE_DECL_CLONE_NOOWNERCOPY, $ac_cv_have_decl_CLONE_NOOWNERCOPY)
 if test x$ac_cv_func_clonefile = xyes -a x$ac_cv_have_decl_CLONE_NOOWNERCOPY = xyes; then
 AC_CONFIG_FILES([vendor/install/Makefile])
+# If we build it, also use to install our own files.
+INSTALL="`(cd vendor; pwd)`/install/build/install"
 fi
 
 # Check for library functions, replacements are in pextlib1.0/compat/
@@ -285,6 +299,119 @@ AC_CHECK_DECLS([atomic_compare_exchange_strong_explicit], [], [], [[#include <st
 
 # Check for md5 implementation
 AC_CHECK_HEADER([CommonCrypto/CommonDigest.h], [AC_DEFINE([HAVE_COMMONCRYPTO_COMMONDIGEST_H], [1], [Define if CommonCrypto is available.])], [MP_LIB_MD5])
+
+AC_ARG_ENABLE([blake3-simd],
+    AS_HELP_STRING([--disable-blake3-simd],[disable BLAKE3 SIMD acceleration and use the portable C backend]),
+    [enable_blake3_simd=$enableval],
+    [enable_blake3_simd=yes])
+
+# BLAKE3 SIMD support - determine which architecture-specific sources to build
+BLAKE3_OBJS="blake3/blake3.o blake3/blake3_dispatch.o blake3/blake3_portable.o"
+case "$host_cpu" in
+    x86_64)
+        if test "x$enable_blake3_simd" = "xno"; then
+            AC_DEFINE([BLAKE3_NO_SSE2], [1], [Disable BLAKE3 SSE2 support.])
+            AC_DEFINE([BLAKE3_NO_SSE41], [1], [Disable BLAKE3 SSE41 support.])
+            AC_DEFINE([BLAKE3_NO_AVX2], [1], [Disable BLAKE3 AVX2 support.])
+            AC_DEFINE([BLAKE3_NO_AVX512], [1], [Disable BLAKE3 AVX512 support.])
+            AC_MSG_CHECKING([for BLAKE3 SIMD support])
+            AC_MSG_RESULT([portable C (SIMD disabled)])
+        else
+            blake3_x86_simd=
+
+            AC_CACHE_CHECK([whether the assembler supports BLAKE3 SSE2 sources], [mp_cv_blake3_sse2_asm], [
+                rm -f conftest*
+                if ${CC} -c ${CPPFLAGS} ${CFLAGS} "${srcdir}/src/pextlib1.0/blake3/src/blake3_sse2_x86-64_unix.S" -o conftest.o >/dev/null 2>&1; then
+                    mp_cv_blake3_sse2_asm=yes
+                else
+                    mp_cv_blake3_sse2_asm=no
+                fi
+                rm -f conftest*
+            ])
+            if test "x$mp_cv_blake3_sse2_asm" = "xyes"; then
+                BLAKE3_OBJS="$BLAKE3_OBJS blake3/blake3_sse2_x86-64_unix.o"
+                blake3_x86_simd="${blake3_x86_simd}SSE2/"
+            else
+                AC_DEFINE([BLAKE3_NO_SSE2], [1], [Disable BLAKE3 SSE2 support.])
+            fi
+
+            AC_CACHE_CHECK([whether the assembler supports BLAKE3 SSE4.1 sources], [mp_cv_blake3_sse41_asm], [
+                rm -f conftest*
+                if ${CC} -c ${CPPFLAGS} ${CFLAGS} "${srcdir}/src/pextlib1.0/blake3/src/blake3_sse41_x86-64_unix.S" -o conftest.o >/dev/null 2>&1; then
+                    mp_cv_blake3_sse41_asm=yes
+                else
+                    mp_cv_blake3_sse41_asm=no
+                fi
+                rm -f conftest*
+            ])
+            if test "x$mp_cv_blake3_sse41_asm" = "xyes"; then
+                BLAKE3_OBJS="$BLAKE3_OBJS blake3/blake3_sse41_x86-64_unix.o"
+                blake3_x86_simd="${blake3_x86_simd}SSE41/"
+            else
+                AC_DEFINE([BLAKE3_NO_SSE41], [1], [Disable BLAKE3 SSE41 support.])
+            fi
+
+            AC_CACHE_CHECK([whether the assembler supports BLAKE3 AVX2 sources], [mp_cv_blake3_avx2_asm], [
+                rm -f conftest*
+                if ${CC} -c ${CPPFLAGS} ${CFLAGS} "${srcdir}/src/pextlib1.0/blake3/src/blake3_avx2_x86-64_unix.S" -o conftest.o >/dev/null 2>&1; then
+                    mp_cv_blake3_avx2_asm=yes
+                else
+                    mp_cv_blake3_avx2_asm=no
+                fi
+                rm -f conftest*
+            ])
+            if test "x$mp_cv_blake3_avx2_asm" = "xyes"; then
+                BLAKE3_OBJS="$BLAKE3_OBJS blake3/blake3_avx2_x86-64_unix.o"
+                blake3_x86_simd="${blake3_x86_simd}AVX2/"
+            else
+                AC_DEFINE([BLAKE3_NO_AVX2], [1], [Disable BLAKE3 AVX2 support.])
+            fi
+
+            AC_CACHE_CHECK([whether the assembler supports BLAKE3 AVX512 sources], [mp_cv_blake3_avx512_asm], [
+                rm -f conftest*
+                if ${CC} -c ${CPPFLAGS} ${CFLAGS} "${srcdir}/src/pextlib1.0/blake3/src/blake3_avx512_x86-64_unix.S" -o conftest.o >/dev/null 2>&1; then
+                    mp_cv_blake3_avx512_asm=yes
+                else
+                    mp_cv_blake3_avx512_asm=no
+                fi
+                rm -f conftest*
+            ])
+            if test "x$mp_cv_blake3_avx512_asm" = "xyes"; then
+                BLAKE3_OBJS="$BLAKE3_OBJS blake3/blake3_avx512_x86-64_unix.o"
+                blake3_x86_simd="${blake3_x86_simd}AVX512"
+            else
+                AC_DEFINE([BLAKE3_NO_AVX512], [1], [Disable BLAKE3 AVX512 support.])
+            fi
+
+            AC_MSG_CHECKING([for BLAKE3 SIMD support])
+            if test -n "$blake3_x86_simd"; then
+                blake3_x86_simd=`echo "$blake3_x86_simd" | sed 's:/$::'`
+                AC_MSG_RESULT([x86-64 assembly (${blake3_x86_simd})])
+            else
+                AC_MSG_RESULT([portable C (no supported x86-64 assembly)])
+            fi
+        fi
+        ;;
+    aarch64|arm64)
+        AC_MSG_CHECKING([for BLAKE3 SIMD support])
+        if test "x$enable_blake3_simd" = "xno"; then
+            AC_DEFINE([BLAKE3_USE_NEON], [0], [Disable BLAKE3 NEON support.])
+            AC_MSG_RESULT([portable C (SIMD disabled)])
+        else
+            BLAKE3_OBJS="$BLAKE3_OBJS blake3/blake3_neon.o"
+            AC_MSG_RESULT([ARM NEON])
+        fi
+        ;;
+    *)
+        AC_DEFINE([BLAKE3_NO_SSE2], [1], [Disable BLAKE3 SSE2 support.])
+        AC_DEFINE([BLAKE3_NO_SSE41], [1], [Disable BLAKE3 SSE41 support.])
+        AC_DEFINE([BLAKE3_NO_AVX2], [1], [Disable BLAKE3 AVX2 support.])
+        AC_DEFINE([BLAKE3_NO_AVX512], [1], [Disable BLAKE3 AVX512 support.])
+        AC_MSG_CHECKING([for BLAKE3 SIMD support])
+        AC_MSG_RESULT([portable C])
+        ;;
+esac
+AC_SUBST(BLAKE3_OBJS)
 
 # Check for readline
 AC_ARG_ENABLE(readline, AS_HELP_STRING([--enable-readline],[enable readline support, if readline present]),
@@ -390,7 +517,7 @@ if test "$CRITCL_PLATFORMS" = "" -a "$OS_PLATFORM" = darwin; then
 fi
 CRITCL_PLATFORMS="$(echo "$CRITCL_PLATFORMS" | \
     sed -E -e 's/macosx-a(rm|arch)64/macosx-aarch64 macosx-arm macosx-arm64/' \
-        -e 's/macosx-i[3-6]86/macosx-ix86/' \
+        -e 's/macosx-i[[3-6]]86/macosx-ix86/' \
         -e 's/macosx-ppc/macosx-powerpc/' \
         | tr '\n' ' ')"
 AC_SUBST(CRITCL_PLATFORMS)
@@ -419,6 +546,7 @@ SHLIB_CFLAGS=${TCL_SHLIB_CFLAGS}
 SHLIB_SUFFIX=${TCL_SHLIB_SUFFIX}
 TCLSH=${TCL_EXEC_PREFIX}/bin/tclsh${TCL_VERSION}
 INTREE_TCLSH=`(cd vendor; pwd)`/tclsh
+TEST_TCLSH=`(cd tests; pwd)`/test-tclsh
 TCL_PACKAGE_PATH="$macports_libexec_dir/lib"
 
 AC_SUBST(SHLIB_LD)
@@ -433,6 +561,7 @@ AC_SUBST(TCL_SRC_DIR)
 AC_SUBST(TCL_BIN_DIR)
 AC_SUBST(TCLSH)
 AC_SUBST(INTREE_TCLSH)
+AC_SUBST(TEST_TCLSH)
 
 INCLUDES="-I.. -I. $INCLUDES"
 AC_SUBST(INCLUDES)
@@ -491,6 +620,7 @@ AC_CONFIG_FILES([
 ])
 
 AC_CONFIG_FILES([vendor/tclsh], [chmod +x vendor/tclsh])
+AC_CONFIG_FILES([tests/test-tclsh], [chmod +x tests/test-tclsh])
 AC_CONFIG_FILES([src/cxx_stdlib_overridden.tcl], [chmod +x src/cxx_stdlib_overridden.tcl])
 AC_CONFIG_FILES([src/dedup_portfiles.tcl], [chmod +x src/dedup_portfiles.tcl])
 AC_CONFIG_FILES([src/images_to_archives.tcl], [chmod +x src/images_to_archives.tcl])

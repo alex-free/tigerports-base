@@ -51,7 +51,7 @@ package require portlist
 proc print_usage {{verbose 1}} {
     global cmdname
     set syntax {
-        [-bcdfknNopqRstuvy] [-D portdir|portname] [-F cmdfile] action [actionflags]
+        [-bcdfknNopqRstTuvy] [-D portdir|portname] [-F cmdfile] action [actionflags]
         [[portname|pseudo-portname|port-url] [@version] [+-variant]... [option=value]...]...
     }
 
@@ -234,7 +234,8 @@ proc add_to_portlist_with_defaults {listname portentry} {
     # If neither portname nor url is specified, then default to the current port
     if {(![dict exists $portentry url] || [dict get $portentry url] eq "")
              && (![dict exists $portentry name] || [dict get $portentry name] eq "")} {
-        set url file://.
+        global current_portdir
+        set url file://${current_portdir}
         set portname [url_to_portname $url]
         dict set portentry url $url
         dict set portentry name $portname
@@ -248,8 +249,6 @@ proc add_to_portlist_with_defaults {listname portentry} {
 }
 
 proc url_to_portname { url {quiet 0} } {
-    # Save directory and restore the directory, since mportopen changes it
-    set savedir [pwd]
     set portname ""
     if {[catch {set ctx [mportopen $url]} result]} {
         ui_debug "$::errorInfo"
@@ -261,7 +260,6 @@ proc url_to_portname { url {quiet 0} } {
         set portname [dict get [mportinfo $ctx] name]
         mportclose $ctx
     }
-    cd $savedir
     return $portname
 }
 
@@ -503,7 +501,8 @@ proc get_current_ports {} {
 
 
 proc get_current_port {} {
-    set url file://.
+    global current_portdir
+    set url file://${current_portdir}
     set portname [url_to_portname $url]
     if {$portname eq ""} {
         ui_msg "To use the current port, you must be in a port's directory."
@@ -636,13 +635,12 @@ proc get_outdated_ports {} {
         if { $comp_result == 0 } {
             set comp_result [expr {[$i revision] - $latest_revision}]
         }
-        if {$comp_result == 0} {
-            if {([$i os_platform] ni [list any "" 0] && [$i os_major] ni [list "" 0]
+        if {$comp_result == 0 && (([$i os_platform] ni [list any "" 0] && [$i os_major] ni [list "" 0]
                 && ([$i os_platform] ne ${os_platform}
                     || ([$i os_major] ne "any" && [$i os_major] != ${os_major})))
-                || ([$i cxx_stdlib_overridden] == 0 && [$i cxx_stdlib] eq $wrong_stdlib)} {
-                set comp_result -1
-            }
+                || (([catch {$i cxx_stdlib_overridden} cxx_stdlib_overridden] || $cxx_stdlib_overridden == 0)
+                     && (![catch {$i cxx_stdlib} cxx_stdlib_installed] && $cxx_stdlib_installed eq $wrong_stdlib)))} {
+            set comp_result -1
         }
 
         # Add outdated ports to our results list
@@ -1302,11 +1300,12 @@ proc add_ports_to_portlist_with_defaults {listname ports {overrides ""}} {
             incr i
         }
     }
+    global current_portdir
     set i 0
     foreach port $ports {
         if {(![dict exists $port url] || [dict get $port url] eq "")
                 && (![dict exists $port name] || [dict get $port name] eq "")} {
-            set url file://.
+            set url file://${current_portdir}
             set portname [url_to_portname $url]
             dict set port url $url
             dict set port name $portname
@@ -1626,7 +1625,7 @@ proc action_log { action portlist opts } {
         # If we have a url, use that, since it's most specific
         # otherwise try to map the portname to a url
         if {$porturl eq ""} {
-        # Verify the portname, getting portinfo to map to a porturl
+            # Verify the portname, getting portinfo to map to a porturl
             if {[catch {mportlookup $portname} result]} {
                 ui_debug "$::errorInfo"
                 break_softcontinue "lookup of portname $portname failed: $result" 1 status
@@ -1636,31 +1635,11 @@ proc action_log { action portlist opts } {
             }
             lassign $result portname portinfo
             set porturl [dict get $portinfo porturl]
-            set portdir [dict get $portinfo portdir]
-        } elseif {$porturl ne "file://."} {
-            # Extract the portdir from porturl and use it to search PortIndex.
-            # Only the last two elements of the path (porturl) make up the
-            # portdir.
-            set portdir [file split [macports::getportdir $porturl]]
-            set lsize [llength $portdir]
-            set portdir \
-                [file join [lindex $portdir [expr {$lsize - 2}]] \
-                           [lindex $portdir [expr {$lsize - 1}]]]
-            if {[catch {mportsearch $portdir no exact portdir} result]} {
-                ui_debug "$::errorInfo"
-                break_softcontinue "Portdir $portdir not found" 1 status
-            }
-            if {[llength $result] < 2} {
-                break_softcontinue "Portdir $portdir not found" 1 status
-            }
-            set matchindex [lsearch -exact -nocase $result $portname]
-            if {$matchindex != -1} {
-                set portinfo [lindex $result [incr matchindex]]
-            } else {
-                ui_warn "Portdir $portdir doesn't seem to belong to portname $portname"
-                set portinfo [lindex $result 1]
-            }
-            set portname [dict get $portinfo name]
+        } elseif {$portname eq ""} {
+            set portname [url_to_portname $porturl]
+        }
+        if {[dict exists $options subport]} {
+            set portname [dict get $options subport]
         }
         set portpath [macports::getportdir $porturl]
         set logfile [file join [macports::getportlogpath $portpath $portname] "main.log"]
@@ -1933,7 +1912,7 @@ proc action_info { action portlist opts } {
                 }
             } elseif {$opt eq "fullname"} {
                 set inf "[dict get $portinfo name] @"
-                append inf [composite_version [dict get $portinfo version] [dict get $portinfo active_variants]]
+                append inf [composite_version [dict get $portinfo version] [expr {[dict exists $portinfo active_variants] ? [dict get $portinfo active_variants] : {}}]]
                 set ropt "fullname"
             } else {
                 # Map from friendly name
@@ -2643,17 +2622,16 @@ proc action_upgrade { action portlist opts } {
 
     # shared depscache for all ports in the list
     array set depscache {}
-    set status 0
+    set portnames [list]
+    set argdict [dict create]
     foreachport $portlist {
-        if {![info exists depscache(port:$portname)]} {
-            set status [macports::upgrade $portname "port:$portname" $requested_variations $options depscache]
-            # status 2 means the port was not found in the index,
-            # status 3 means the port is not installed
-            if {$status != 0 && $status != 2 && $status != 3 && ![macports::ui_isset ports_processall]} {
-                break
-            }
-        }
+        lappend portnames $portname
+        dict set argdict $portname dspec port:$portname
+        dict set argdict $portname variations $requested_variations
+        dict set argdict $portname options $options
     }
+    set upgrade_options [dict create ignore_unindexed 1 ignore_uninstalled 1]
+    set status [macports::upgrade_multi $portnames $argdict $upgrade_options depscache]
 
     if {$status != 0 && $status != 2 && $status != 3} {
         print_tickets_url
@@ -2826,6 +2804,7 @@ proc action_deps { action portlist opts } {
         if {!([dict exists $options ports_${action}_no-test] && [string is true -strict [dict get $options ports_${action}_no-test]])} {
             lappend deptypes depends_test
         }
+        set index_only [expr {[dict exists $options ports_${action}_index] && [dict get $options ports_${action}_index] eq "yes"}]
 
         set portinfo ""
         # If we have a url, use that, since it's most specific
@@ -2841,7 +2820,7 @@ proc action_deps { action portlist opts } {
             }
             lassign $result portname portinfo
             set porturl [dict get $portinfo porturl]
-        } elseif {$porturl ne "file://."} {
+        } elseif {$index_only} {
             # Extract the portdir from porturl and use it to search PortIndex.
             # Only the last two elements of the path (porturl) make up the
             # portdir.
@@ -2866,7 +2845,7 @@ proc action_deps { action portlist opts } {
             }
         }
 
-        if {!([dict exists $options ports_${action}_index] && [dict get $options ports_${action}_index] eq "yes")} {
+        if {!$index_only} {
             # Add any global_variations to the variations
             # specified for the port, so we get dependencies right
             set merged_variations [dict merge $gvariations $variations]
@@ -2952,7 +2931,7 @@ proc action_deps { action portlist opts } {
                     dict set options subport [dict get $portinfo name]
 
                     # open the portfile if requested
-                    if {!([dict exists $options ports_${action}_index] && [dict get $options ports_${action}_index] eq "yes")} {
+                    if {!$index_only} {
                         if {[catch {set mport [mportopen $porturl $options $merged_variations]} result]} {
                             ui_debug "$::errorInfo"
                             break_softcontinue "Unable to open port: $result" 1 status
@@ -3264,12 +3243,12 @@ proc action_outdated { action portlist opts } {
                         || ($os_major_installed ne "any" && $os_major_installed != ${os_major}))} {
                     set comp_result -1
                     set reason { (platform $os_platform_installed $os_major_installed != ${os_platform} ${os_major})}
-                } else {
-                    set cxx_stdlib_installed [$i cxx_stdlib]
-                    if {[$i cxx_stdlib_overridden] == 0 && $cxx_stdlib_installed eq $wrong_stdlib} {
-                        set comp_result -1
-                        set reason { (C++ stdlib $cxx_stdlib_installed != ${cxx_stdlib})}
-                    }
+                } elseif {![catch {$i cxx_stdlib} cxx_stdlib_installed]
+                          && $cxx_stdlib_installed eq $wrong_stdlib
+                          && ![catch {$i cxx_stdlib_overridden} cxx_stdlib_overridden]
+                          && $cxx_stdlib_overridden == 0} {
+                    set comp_result -1
+                    set reason { (C++ stdlib $cxx_stdlib_installed != ${cxx_stdlib})}
                 }
             }
 
@@ -3853,6 +3832,9 @@ proc action_portcmds { action portlist opts } {
                 }
 
                 work {
+                    if {[dict exists $options subport]} {
+                        set portname [dict get $options subport]
+                    }
                     # output the path to the port's work directory
                     set workpath [macports::getportworkpath_from_portdir $portdir $portname]
                     if {[file exists $workpath]} {
@@ -3877,6 +3859,9 @@ proc action_portcmds { action portlist opts } {
                 }
 
                 logfile {
+                    if {[dict exists $options subport]} {
+                        set portname [dict get $options subport]
+                    }
                     set logfile [file join [macports::getportlogpath $portdir $portname] "main.log"]
                     if {[file isfile $logfile]} {
                         puts $logfile
@@ -3945,6 +3930,7 @@ proc action_target { action portlist opts } {
     set status 0
     global global_variations macports::ui_options
     set gvariations [dict create {*}[array get global_variations]]
+    set ops [list]
     foreachport $portlist {
         set portinfo ""
         # If we have a url, use that, since it's most specific
@@ -4020,6 +4006,8 @@ proc action_target { action portlist opts } {
             if {![dict exists $options ports_install_unrequested]} {
                 dict set options ports_requested 1
             }
+            # signal intent to install
+            dict set options mport_hint_install 1
             # we actually activate as well by default
             if {![dict exists $options ports_install_no-activate]} {
                 set target activate
@@ -4032,22 +4020,27 @@ proc action_target { action portlist opts } {
         if {![dict exists $options subport]} {
             dict set options subport $portname
         }
-        if {[catch {set workername [mportopen $porturl $options $requested_variations]} result]} {
+        if {[catch {set mport [mportopen $porturl $options $requested_variations]} result]} {
             ui_debug $::errorInfo
             break_softcontinue "Unable to open port $portname: $result" 1 status
         }
-        if {[catch {mportexec $workername $target} result]} {
-            ui_debug $::errorInfo
-            mportclose $workername
-            break_softcontinue "Unable to execute port $portname: $result" 1 status
-        }
+        macports::target_hint $mport $target
+        lappend ops $mport $portname $target
+    }
+    if {$status == 0} {
+        foreach {mport portname target} $ops {
+            if {[catch {mportexec $mport $target} result]} {
+                ui_debug $::errorInfo
+                mportclose $mport
+                break_softcontinue "Unable to execute port $portname: $result" 1 status
+            }
+            mportclose $mport
 
-        mportclose $workername
-
-        # Process any error that wasn't thrown and handled already
-        if {$result} {
-            print_tickets_url
-            break_softcontinue "Processing of port $portname failed" 1 status
+            # Process any error that wasn't thrown and handled already
+            if {$result} {
+                print_tickets_url
+                break_softcontinue "Processing of port $portname failed" 1 status
+            }
         }
     }
 
@@ -4467,6 +4460,9 @@ proc parse_options { action ui_options_name global_options_name } {
                     }
                     t {
                         set global_options(ports_trace) yes
+                    }
+                    T {
+                        set ui_options(ports_timestamps) yes
                     }
                     y {
                         set global_options(ports_dryrun) yes
@@ -5710,7 +5706,15 @@ if {[info exists global_options(ports_dir)]} {
 }
 
 # Set up some global state for our code
-set current_portdir [pwd]
+
+# Handle missing or inaccessible current working directory
+if {[catch {pwd} current_portdir]} {
+    # Use somewhere that will exist and won't contain a Portfile (which
+    # would make the 'current' pseudoport behave unexpectedly)
+    set current_portdir $::macports::portdbpath
+    ui_warn "Unable to access current working directory, changing to $current_portdir"
+    cd $current_portdir
+}
 
 # Remove question settings from ui_options - these are only used via 
 # macports::ui_options and could be removed internally, and we don't

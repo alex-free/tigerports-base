@@ -31,6 +31,7 @@
 
 package provide portfetch 1.0
 package require fetch_common 1.0
+package require portextract 1.0
 package require portutil 1.0
 package require Pextlib 1.0
 
@@ -45,8 +46,8 @@ namespace eval portfetch {
 }
 
 # define options: distname master_sites
-options master_sites patch_sites extract.suffix distfiles patchfiles use_tar \
-    use_bzip2 use_lzma use_xz use_zip use_7z use_lzip use_dmg dist_subdir \
+options master_sites patch_sites distfiles patchfiles \
+    dist_subdir \
     fetch.type fetch.user fetch.password fetch.use_epsv fetch.ignore_sslcert \
     fetch.user_agent master_sites.mirror_subdir patch_sites.mirror_subdir \
     bzr.url bzr.revision \
@@ -62,7 +63,6 @@ commands cvs
 commands svn
 
 # Defaults
-default extract.suffix .tar.gz
 default fetch.type standard
 
 default bzr.cmd {[findBinary bzr $portutil::autoconf::bzr_path]}
@@ -121,56 +121,8 @@ default mirror_sites.listfile mirror_sites.tcl
 default mirror_sites.listpath port1.0/fetch
 
 # Option-executed procedures
-option_proc use_tar   portfetch::set_extract_type
-option_proc use_bzip2 portfetch::set_extract_type
-option_proc use_lzma  portfetch::set_extract_type
-option_proc use_xz    portfetch::set_extract_type
-option_proc use_zip   portfetch::set_extract_type
-option_proc use_7z    portfetch::set_extract_type
-option_proc use_lzip  portfetch::set_extract_type
-option_proc use_dmg   portfetch::set_extract_type
 
 option_proc fetch.type portfetch::set_fetch_type
-
-proc portfetch::set_extract_type {option action args} {
-    global extract.suffix
-    if {[string equal ${action} "set"] && [tbool args]} {
-        switch $option {
-            use_tar {
-                set extract.suffix .tar
-            }
-            use_bzip2 {
-                set extract.suffix .tar.bz2
-                if {![catch {findBinary lbzip2} result]} {
-                    depends_extract-append bin:lbzip2:lbzip2
-                }
-            }
-            use_lzma {
-                set extract.suffix .tar.lzma
-                depends_extract-append bin:lzma:xz
-            }
-            use_xz {
-                set extract.suffix .tar.xz
-                depends_extract-append bin:xz:xz
-            }
-            use_zip {
-                set extract.suffix .zip
-                depends_extract-append bin:unzip:unzip
-            }
-            use_7z {
-                set extract.suffix .7z
-                depends_extract-append bin:7za:p7zip
-            }
-            use_lzip {
-                set extract.suffix .tar.lz
-                depends_extract-append bin:lzip:lzip
-            }
-            use_dmg {
-                set extract.suffix .dmg
-            }
-        }
-    }
-}
 
 proc portfetch::set_fetch_type {option action args} {
     global os.platform os.major
@@ -496,12 +448,66 @@ proc portfetch::hgfetch {args} {
 
 # Perform a standard fetch, assembling fetch urls from
 # the listed url variable and associated distfile
-proc portfetch::fetchfiles {args} {
+proc portfetch::fetchfiles {{async no} args} {
     global distpath UI_PREFIX \
            fetch.user fetch.password fetch.use_epsv fetch.ignore_sslcert fetch.remote_time \
            fetch.user_agent portverbose
     variable fetch_urls
     variable urlmap
+    variable async_jobs
+    variable async_logid
+
+    if {$async} {
+        if {[info exists async_jobs]} {
+            # Async fetch already started
+            return 0
+        }
+        set async_jobs [list]
+    } elseif {[info exists async_jobs]} {
+        # Fetch was started asynchronously, wait for jobs to finish
+        set async_jobs_copy $async_jobs
+        # Ensure we don't try to get results for jobs twice
+        unset async_jobs
+        set any_failed 0
+        foreach {distfile jobid} $async_jobs_copy {
+            set cancelled 0
+            if {![curlwrap_async_is_complete $jobid]} {
+                if {!$any_failed} {
+                    # Display progress for this fetch while waiting for it to finish
+                    curlwrap_async_show_progress $jobid
+                    # Loop with a reasonable timeout so we don't wait too long
+                    # to handle events like signals.
+                    while {![curlwrap_async_is_complete $jobid 500]} {}
+                } else {
+                    # If something failed, stop other incomplete jobs so we fail fast
+                    curlwrap_async_cancel $jobid
+                    set cancelled 1
+                }
+            }
+            if {!$cancelled} {
+                lassign [curlwrap_async_result $jobid] status result
+                if {$status != 0} {
+                    # Some ports have a lot of distfiles, so don't print an
+                    # error for all of them outside of debug mode.
+                    if {!$any_failed} {
+                        ui_error "Failed to fetch ${distfile}: $result"
+                    } else {
+                        ui_debug "Failed to fetch ${distfile}: $result"
+                    }
+                    set any_failed 1
+                    file delete -force ${distpath}/${distfile}.TMP
+                } elseif {![file exists ${distpath}/${distfile}]} {
+                    file rename -force ${distpath}/${distfile}.TMP ${distpath}/${distfile}
+                }
+            } else {
+                file delete -force ${distpath}/${distfile}.TMP
+            }
+        }
+        if {$any_failed} {
+            error "Failed to fetch distfiles"
+        }
+        return 0
+    }
 
     set fetch_options [list]
     set credentials {}
@@ -521,18 +527,22 @@ proc portfetch::fetchfiles {args} {
         lappend fetch_options "--user-agent"
         lappend fetch_options "${fetch.user_agent}"
     }
-    if {$portverbose eq "yes"} {
-        lappend fetch_options "--progress"
-        lappend fetch_options "builtin"
-    } else {
-        lappend fetch_options "--progress"
-        lappend fetch_options "ui_progress_download"
+    if {!$async} {
+        if {$portverbose eq "yes"} {
+            lappend fetch_options "--progress"
+            lappend fetch_options "builtin"
+        } else {
+            lappend fetch_options "--progress"
+            lappend fetch_options "ui_progress_download"
+        }
     }
     set sorted no
 
     foreach {url_var distfile} $fetch_urls {
-        if {![file isfile "${distpath}/${distfile}"]} {
-            ui_info "$UI_PREFIX [format [msgcat::mc "%s does not exist in %s"] $distfile $distpath]"
+        if {![file isfile ${distpath}/${distfile}]} {
+            if {!$async} {
+                ui_info "$UI_PREFIX [format [msgcat::mc "%s does not exist in %s"] $distfile $distpath]"
+            }
             if {![file writable $distpath]} {
                 return -code error [format [msgcat::mc "%s must be writable"] $distpath]
             }
@@ -544,28 +554,42 @@ proc portfetch::fetchfiles {args} {
                 ui_error [format [msgcat::mc "No defined site for tag: %s, using master_sites"] $url_var]
                 set urlmap($url_var) $urlmap(master_sites)
             }
-            unset -nocomplain fetched
-            set lastError ""
-            foreach site $urlmap($url_var) {
-                ui_notice "$UI_PREFIX [format [msgcat::mc "Attempting to fetch %s from %s"] $distfile $site]"
-                set file_url [portfetch::assemble_url $site $distfile]
-                macports_try -pass_signal {
-                    curlwrap fetch $site $credentials {*}$fetch_options $file_url ${distpath}/${distfile}.TMP
-                    file rename -force "${distpath}/${distfile}.TMP" "${distpath}/${distfile}"
-                    set fetched 1
-                    break
-                } on error {eMessage} {
-                    ui_debug [msgcat::mc "Fetching distfile failed: %s" $eMessage]
-                    set lastError $eMessage
-                } finally {
-                    file delete -force "${distpath}/${distfile}.TMP"
+            if {$async} {
+                # Skip if something else is already fetching this file
+                if {[curlwrap_async_file_is_in_progress ${distpath}/${distfile}]} {
+                    continue
                 }
-            }
-            if {![info exists fetched]} {
-                if {$lastError ne ""} {
-                    error $lastError
-                } else {
-                    error [msgcat::mc "fetch failed"]
+                file delete -force ${distpath}/${distfile}.TMP
+                touch ${distpath}/${distfile}.TMP
+                chownAsRoot ${distpath}/${distfile}.TMP
+                lappend async_jobs $distfile \
+                    [curlwrap_async fetch_file $credentials $fetch_options $urlmap($url_var) \
+                        [lmap site $urlmap($url_var) {portfetch::assemble_url $site $distfile}] \
+                        ${distpath}/${distfile} $async_logid]
+            } else {
+                unset -nocomplain fetched
+                set lastError ""
+                foreach site $urlmap($url_var) {
+                    ui_notice "$UI_PREFIX [format [msgcat::mc "Attempting to fetch %s from %s"] $distfile $site]"
+                    set file_url [portfetch::assemble_url $site $distfile]
+                    macports_try -pass_signal {
+                        curlwrap fetch $site $credentials {*}$fetch_options $file_url ${distpath}/${distfile}.TMP
+                        file rename -force "${distpath}/${distfile}.TMP" "${distpath}/${distfile}"
+                        set fetched 1
+                        break
+                    } on error {eMessage} {
+                        ui_debug [msgcat::mc "Fetching distfile failed: %s" $eMessage]
+                        set lastError $eMessage
+                    } finally {
+                        file delete -force "${distpath}/${distfile}.TMP"
+                    }
+                }
+                if {![info exists fetched]} {
+                    if {$lastError ne ""} {
+                        error $lastError
+                    } else {
+                        error [msgcat::mc "fetch failed"]
+                    }
                 }
             }
         }
@@ -595,6 +619,70 @@ proc portfetch::fetch_addfilestomap {filemapname} {
     }
 }
 
+# Check if all distfiles are already present.
+proc portfetch::files_present {} {
+    global distpath
+    variable fetch_urls
+    foreach {url_var distfile} $fetch_urls {
+        if {![file isfile ${distpath}/${distfile}]} {
+            return 0
+        }
+    }
+    return 1
+}
+
+# Start asynchronous fetch of distfiles
+proc portfetch::fetch_async_start {logid} {
+    global all_dist_files fetch.type
+    if {${fetch.type} ne "standard"} {
+        # Async only supported for file fetches
+        return 0
+    }
+    fetch_init
+    if {![info exists all_dist_files]} {
+        # No files to fetch
+        return 0
+    }
+    if {[files_present]} {
+        # Already fetched
+        return 0
+    }
+    _fetch_start
+    variable async_logid $logid
+    fetchfiles yes
+}
+
+proc portfetch::_async_cleanup {} {
+    variable async_jobs
+    if {[info exists async_jobs]} {
+        global distpath
+        foreach {distfile jobid} $async_jobs {
+            curlwrap_async_cancel $jobid
+            file delete ${distpath}/${distfile}.TMP
+        }
+        unset async_jobs
+    }
+}
+
+proc portfetch::start_pings {} {
+    variable fetch_urls
+    variable urlmap
+    # ping hosts that are not in the cache yet
+    foreach {url_var distfile} $fetch_urls {
+        if {[info exists urlmap($url_var)]} {
+            async_ping_start $urlmap($url_var)
+        }
+    }
+    # wait until we have a result for at least the main mirror
+    global global_mirror_site
+    if {[info exists portfetch::mirror_sites::sites($global_mirror_site)]} {
+        set primary_mirror [lindex $portfetch::mirror_sites::sites($global_mirror_site) 0]
+        if {$primary_mirror ne {}} {
+            wait_for_pingtime $primary_mirror
+        }
+    }
+}
+
 # Initialize fetch target and call checkfiles.
 proc portfetch::fetch_init {args} {
     variable fetch_urls
@@ -604,10 +692,12 @@ proc portfetch::fetch_init {args} {
     }
 }
 
-proc portfetch::fetch_start {args} {
-    global UI_PREFIX subport distpath
+proc portfetch::_fetch_start {} {
+    global UI_PREFIX distpath all_dist_files
 
-    ui_notice "$UI_PREFIX [format [msgcat::mc "Fetching distfiles for %s"] $subport]"
+    if {[info exists all_dist_files]} {
+        start_pings
+    }
 
     # create and chown $distpath
     if {![file isdirectory $distpath]} {
@@ -631,6 +721,21 @@ proc portfetch::fetch_start {args} {
     }
 
     portfetch::check_dns
+}
+
+proc portfetch::fetch_start {args} {
+    global subport UI_PREFIX portarchivefetch::attempted
+
+    if {[tbool attempted]} {
+        ui_notice "$UI_PREFIX [format [msgcat::mc "Archive not available for %s, building locally"] $subport]"
+    }
+
+    ui_notice "$UI_PREFIX [format [msgcat::mc "Fetching distfiles for %s"] $subport]"
+    if {[files_present]} {
+        # Already fetched
+        return 0
+    }
+    _fetch_start
 }
 
 # Main fetch routine

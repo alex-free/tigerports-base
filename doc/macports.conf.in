@@ -140,16 +140,6 @@ universal_archs
 # Keep logs after successful installations.
 #keeplogs            	no
 
-# URLs that MacPorts attempts to download to find out whether a new version was
-# released. Multiple values, space-separated; only one of the URLs needs to be
-# available. Downloads will be attempted in the specified order.
-#release_version_urls https://raw.githubusercontent.com/macports/macports-base/master/config/RELEASE_URL \
-#                     https://trac.macports.org/export/master/macports-base/config/RELEASE_URL \
-#                     https://distfiles.macports.org/MacPorts/RELEASE_URL
-# SSL too old for github.
-#release_version_urls https://raw.githubusercontent.com/alex-free/tigerports-base/master/config/RELEASE_URL
-release_version_urls http://tigerports.com/macports/distfiles/MacPorts/RELEASE_URL
-
 # URL where MacPorts will download a new source code archive, if the
 # release_version_urls indicate that the current version needs to be updated.
 # In this URL, {version} will be replaced with the version number determined
@@ -163,7 +153,6 @@ release_version_urls http://tigerports.com/macports/distfiles/MacPorts/RELEASE_U
 #release_urls https://github.com/macports/macports-base/releases/download/v{version}/MacPorts-{version}.tar.bz2
 # SSL too old for github
 #release_urls https://github.com/alex-free/tigerports-base/releases/download/v{version}/MacPorts-{version}.tar.bz2
-release_urls http://tigerports.com/macports/distfiles/MacPorts/TigerPorts-{version}.tar.bz2
 
 # The rsync server for fetching MacPorts base during selfupdate. This
 # setting is NOT used when downloading ports trees; ports trees are

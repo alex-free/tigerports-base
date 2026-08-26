@@ -12,6 +12,12 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Don't need to run configure because macports will do that in selfupdate mode.
+if [ "$1" == "--selfupdate" ]; then
+    echo "Bootstrap is being run in selfupdate mode and will not automatically run configure."
+    selfupdate=true
+fi
+
 # Mac $PATH
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 # WARNING: prefix is always deleted for clean bootstraps when you run this script.
@@ -37,8 +43,10 @@ cleanup()
 trap cleanup EXIT
 
 configure_base() {
-    ./configure --with-curlprefix=$prefix
-    echo "TigerPorts base has been configured and is ready for make and make install"
+    if [ "$selfupdate" == "false" ]; then
+        ./configure --with-curlprefix=$prefix
+        echo "TigerPorts base has been configured and is ready for make and make install"
+    fi
 }
 
 install_certs() {

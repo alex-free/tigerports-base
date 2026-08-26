@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [[ ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Invalid version argument. Must be in format of X.Y.Z, where X, Y, Z are numbers, i.e. 1.1.9."
+if [[ ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+[0-9]$ ]]; then
+    echo "Invalid version argument."
     exit 1
 fi
 
@@ -20,9 +20,9 @@ echo "Building configure and manpages..."
 ./autogen.sh
 ./standard_configure.sh
 make -C doc/ clean all \
-	ASCIIDOC=/opt/local/bin/asciidoc \
-	XSLTPROC=/opt/local/bin/xsltproc \
-        DOCBOOK_XSL=/opt/local/share/xsl/docbook-xsl-nons/manpages/docbook.xsl
+    ASCIIDOC=/opt/local/bin/asciidoc \
+    XSLTPROC=/opt/local/bin/xsltproc \
+    DOCBOOK_XSL=/opt/local/share/xsl/docbook-xsl-nons/manpages/docbook.xsl
 
 echo "Building release tarballs..."
 rm configure~

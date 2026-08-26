@@ -32,7 +32,9 @@
 #endif
 
 /* required for getaddrinfo(3) on Linux */
+#ifdef __linux__
 #define _XOPEN_SOURCE 600L
+#endif
 
 #include "time_connect.h"
 

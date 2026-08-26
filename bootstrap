@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# If bootstrap openssl or curl is updated in a new base version, we want to rebuild those in i.e. selfupdate.
+# If they are already present, no need to rebuild the same bootstrap softwares.
+# Selfupdate runs bootstrap blindly, so this is a good solution to 'notify' that new bootstrap software is available.
+# Regardless SSL certs are updated as that takes no time at all to do.
+# This can be forced 
+force_bootstrap_rebuild=false
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Error: run bootstrap with sudo or root"
+    exit 1
+fi
+
+# Mac $PATH
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+# WARNING: prefix is always deleted for clean bootstraps when you run this script.
+prefix=/opt/local/bootstrap
+ssl=openssl-1.0.2u
+curl=curl-8.17.0
+certs=cacert-2026-08-13.pem
+arch=$(uname -m)
+# We should probably increase this a bit if we have more then one CPU.
+number_of_cpus=$(sysctl -n hw.ncpu)
+tmp=$(mktemp -d /var/tmp/curl.bootstrap.XXX)
+# Because this isn't /tmp, we need to make it rwx:
+chmod -R 777 $tmp
+
+# When this script exits, automatically delete the temp directory.
+cleanup() 
+{ 
+    if [[ -e $tmp ]]; then
+        echo "Clearing temp files..."  
+        rm -rf $tmp   
+    fi
+}
+trap cleanup EXIT
+
+configure_base() {
+    ./configure --with-curlprefix=$prefix
+    echo "TigerPorts base has been configured and is ready for make and make install"
+}
+
+install_certs() {
+    mkdir -p $prefix/etc/ssl
+    cp -v bootstrap-src/$certs $prefix/etc/ssl/cacert.pem
+    echo "$certs installed!"
+}
+
+if [ "$arch" == ppc ]; then
+    ssl_config_val=darwin-ppc-cc
+elif [ "$arch" == ppc64 ]; then
+    ssl_config_val=darwin64-ppc-cc
+elif [ "$arch" == i386 ]; then
+    ssl_config_val=darwin-i386-cc
+elif [ "$arch" == x86_64 ]; then
+    ssl_config_val=darwin64-x86_64-cc
+else
+    echo "Error: unsupported $arch"
+    exit 1
+fi
+
+# CA certificates extracted from Mozilla 
+# https://curl.se/docs/caextract.html
+# Note: These can be updated via http. Perhaps implement that.
+if [ -e "/opt/local/bootstrap" && $force_bootstrap_rebuild == false && "$1" != "-f" ]; then
+    echo "Skipping full rebuild of bootstrap software as it is not needed."
+    echo "Note: if you want to force rebuilding all bootstrap software anyways, pass the -f arg:"
+    echo "./bootstrap -f"
+    install_certs
+    configure_base
+    exit 0
+else
+    rm -rf $prefix
+    install_certs
+fi
+
+# OpenSSL 1.1.1x needs Perl 5.8.6 which tiger does not have, and bootstrap doesn't build (yet).
+# OpenSSL 1.0.2 gets us TLSv1.2, which is good enough for gitlab, github, and most distfile sites for now in 2026.
+# OpenSSL 1.1.1x will get us to TLSv1.3 if/when that is implemented in bootstrap.
+# Using install_sw target skips docs that we don't need and take forever to generate.
+# Mac OS X needs Configure not config, so we need to pass it the value it wants.
+# Tiger Intel fails on asm so disable it.
+# Tiger fails on async so disable it.
+# Tiger fails on threads so disable it.
+# Mac OS X ships with shared zlib.
+cp -rv bootstrap-src/$ssl $tmp
+(
+    cd $tmp/$ssl && ./Configure \
+        --prefix=$prefix \
+        --openssldir=$prefix \
+        enable-shared \
+        zlib-dynamic \
+		no-async \
+		no-threads \
+        no-asm \
+        $ssl_config_val
+)
+make -j$number_of_cpus -C $tmp/$ssl
+make -C $tmp/$ssl install_sw 
+echo "$ssl installed!"
+
+# Last version of Curl that can use OpenSSL 1.1.1.x.
+# The last version of Curl that can use Tiger system zlib is 8.11.0, but it segfaults with it enabled.
+# Bootstrap doesn't (yet) build zlib, so disable zlib for now.
+# Disabble libpsl because Mac OS X doesn't ship with it. It can be built even on tiger but bootstrap doesn't.
+cp -rv bootstrap-src/$curl $tmp
+(
+    cd $tmp/$curl && ./configure \
+        CPPFLAGS="-I$prefix/include" \
+        LDFLAGS="-L$prefix/lib" \
+        --prefix=$prefix \
+        --with-ssl=$prefix \
+        --with-ca-bundle=$prefix/etc/ssl/cacert.pem \
+        --without-zlib \
+        --without-libpsl \
+        ac_cv_path_PKGCONFIG="no"
+)
+make -j$number_of_cpus -C $tmp/$curl
+make -C $tmp/$curl install
+echo "$curl installed!"
+configure_base

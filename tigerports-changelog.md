@@ -1,3 +1,11 @@
+v2.12.04.002 - 8/26/2026
+
+* Fixed bootstrap ppc detection.
+
+* Improved bootstrap rebuild detection so that it will not rebuild only if curl successfully was built (and -f wasn't given, and its not set to false for version bump via selfupdate).
+
+* Bootstrap now extracts tarballs instead of copying extracted source directories. This not only makes diffing this against other macports-base projects easier, but fixes issues related to copying extracted sources after they have been uploaded to git.
+
 v2.12.04.001 - 8/26/2026
 
 * Now at parity with MacPorts v2.12.04, specificially we are at: https://github.com/macports/macports-base/commit/227a37b749dc2991bbaf7c600dd56e46174f8206. This enables a ton of new base features and functionallity, and gets TigerPorts-base up to date with MacPorts-base as of 4/10/2026.

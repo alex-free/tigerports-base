@@ -16,6 +16,8 @@ fi
 if [ "$1" == "--selfupdate" ]; then
     echo "Bootstrap is being run in selfupdate mode and will not automatically run configure."
     selfupdate=true
+else
+    selfupdate=false
 fi
 
 # Mac $PATH
@@ -25,7 +27,7 @@ prefix=/opt/local/bootstrap
 ssl=openssl-1.0.2u
 curl=curl-8.17.0
 certs=cacert-2026-08-13.pem
-arch=$(uname -m)
+arch=$(arch)
 # We should probably increase this a bit if we have more then one CPU.
 number_of_cpus=$(sysctl -n hw.ncpu)
 tmp=$(mktemp -d /var/tmp/curl.bootstrap.XXX)
@@ -37,7 +39,7 @@ cleanup()
 { 
     if [[ -e $tmp ]]; then
         echo "Clearing temp files..."  
-        rm -rf $tmp   
+        #rm -rf $tmp   
     fi
 }
 trap cleanup EXIT
@@ -55,14 +57,13 @@ install_certs() {
     echo "$certs installed!"
 }
 
+# TODO: x86_64. Even 10.12 says arch is i386 so can't use it as is. Test ppc64 on tiger server.
 if [ "$arch" == ppc ]; then
     ssl_config_val=darwin-ppc-cc
 elif [ "$arch" == ppc64 ]; then
     ssl_config_val=darwin64-ppc-cc
 elif [ "$arch" == i386 ]; then
     ssl_config_val=darwin-i386-cc
-elif [ "$arch" == x86_64 ]; then
-    ssl_config_val=darwin64-x86_64-cc
 else
     echo "Error: unsupported $arch"
     exit 1
@@ -71,7 +72,7 @@ fi
 # CA certificates extracted from Mozilla 
 # https://curl.se/docs/caextract.html
 # Note: These can be updated via http. Perhaps implement that.
-if [ -e "/opt/local/bootstrap" && $force_bootstrap_rebuild == false && "$1" != "-f" ]; then
+if [ -e "/opt/local/bootstrap/bin/curl" ] && [ "$force_bootstrap_rebuild" = false ] && [ "$1" != "-f" ]; then
     echo "Skipping full rebuild of bootstrap software as it is not needed."
     echo "Note: if you want to force rebuilding all bootstrap software anyways, pass the -f arg:"
     echo "./bootstrap -f"
@@ -92,9 +93,13 @@ fi
 # Tiger fails on async so disable it.
 # Tiger fails on threads so disable it.
 # Mac OS X ships with shared zlib.
-cp -rv bootstrap-src/$ssl $tmp
+# Note: it asks to make depend but we don't have makedepend installed and it's not needed.
+echo "Extracting $ssl.tar.gz..."
+tar zxf bootstrap-src/$ssl.tar.gz -C $tmp
 (
-    cd $tmp/$ssl && ./Configure \
+    cd $tmp/$ssl
+
+    ./Configure \
         --prefix=$prefix \
         --openssldir=$prefix \
         enable-shared \
@@ -103,18 +108,20 @@ cp -rv bootstrap-src/$ssl $tmp
 		no-threads \
         no-asm \
         $ssl_config_val
+
+    make -j$number_of_cpus
+    make install_sw
 )
-make -j$number_of_cpus -C $tmp/$ssl
-make -C $tmp/$ssl install_sw 
-echo "$ssl installed!"
 
 # Last version of Curl that can use OpenSSL 1.1.1.x.
 # The last version of Curl that can use Tiger system zlib is 8.11.0, but it segfaults with it enabled.
 # Bootstrap doesn't (yet) build zlib, so disable zlib for now.
 # Disabble libpsl because Mac OS X doesn't ship with it. It can be built even on tiger but bootstrap doesn't.
-cp -rv bootstrap-src/$curl $tmp
+echo "Extracting $curl.tar.bz2..."
+tar jxf bootstrap-src/$curl.tar.bz2 -C $tmp
 (
-    cd $tmp/$curl && ./configure \
+    cd $tmp/$curl
+    ./configure \
         CPPFLAGS="-I$prefix/include" \
         LDFLAGS="-L$prefix/lib" \
         --prefix=$prefix \
@@ -123,8 +130,7 @@ cp -rv bootstrap-src/$curl $tmp
         --without-zlib \
         --without-libpsl \
         ac_cv_path_PKGCONFIG="no"
+    make -j$number_of_cpus
+    make install
 )
-make -j$number_of_cpus -C $tmp/$curl
-make -C $tmp/$curl install
-echo "$curl installed!"
 configure_base

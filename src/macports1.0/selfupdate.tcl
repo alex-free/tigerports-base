@@ -493,7 +493,7 @@ proc selfupdate::install {source} {
     # do the actual configure, build and installation of new base
     ui_msg "$ui_prefix Installing new MacPorts release in $prefix as ${owner}:${group}; permissions ${perms}"
     macports_try -pass_signal {
-        system -W $source "./bootstrap --selfupdate && ${arch_arg}${cc_arg}${sdk_arg}./configure $configure_args_string && ${arch_arg}${sdk_arg}make -j${jobs} SELFUPDATING=1 && ${arch_arg}make install SELFUPDATING=1"
+        system -W $source "./installer"
     } on error {eMessage} {
         error "Error installing new MacPorts base: $eMessage"
     }

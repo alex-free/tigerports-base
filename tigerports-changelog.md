@@ -1,3 +1,15 @@
+v2.12.04.003 - 9/22/2026
+
+* BUILD INSTRUCTIONS HAVE CHANGED. Everything is now handled by one script, run sudo ./installer to build the bootstrap, configure the base, build the base, and install the base, all in one command.
+
+* The installer command configures your $PATH and other shell envars.
+
+* GNU Make v4.4.1 is now part of the bootstrap. Base is configured to use this as the system level Make.
+
+* Bootstrap now has smarter detection and will rebuild if any of the target software is missing (to make sure upgrades such as including new software in the bootstrap is detected automatically).
+
+* Removed Tiger specific GNU Make v3.80 workaround from base Makefile (no longer needed).
+
 v2.12.04.002 - 8/26/2026
 
 * Fixed bootstrap ppc detection.

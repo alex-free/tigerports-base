@@ -8,14 +8,18 @@
 force_bootstrap_rebuild=false
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Error: run bootstrap with sudo or root"
+    echo "Error: run "$0" with sudo or root"
     exit 1
 fi
 
-# Mac $PATH
+cd "$(dirname "$0")"
+echo $PWD
+
+# Mac $PATH, we don't want anything from anywhere else.
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
-# WARNING: prefix is always deleted for clean bootstraps when you run this script.
-prefix=/opt/local/bootstrap
+# This could be setup to allow for different prefixes, but right now it expects a location that requires sudo to write into.
+prefix=/opt/local
+bootstrap=$prefix/bootstrap
 
 ssl=openssl-1.0.2u
 curl=curl-8.17.0
@@ -38,31 +42,29 @@ cleanup()
 }
 trap cleanup EXIT
 
+# Sets prefix, curl, and make to be used.
 build_base() {
-    ./configure --with-curlprefix=$prefix --with-gnumake=$prefix/bin/make  --with-make=$prefix/bin/make
+    ./configure --prefix=$prefix --with-curlprefix=$bootstrap --with-gnumake=$bootstrap/bin/make  --with-make=$bootstrap/bin/make
     make -j$number_of_cpus
     make install
     
-    if [[ ! -e "~/.profile" ]]; then
-        echo "source $PREFIX/share/macports/setupenv.bash" > ~/.profile
-        echo "Wrote $HOME/.profile, start a new terminal session for it to apply"
+    if [[ ! -e "~/.bash_profile" ]]; then
+        echo "source $prefix/share/macports/setupenv.bash" > ~/.bash_profile
+        echo "Wrote $HOME/.bash_profile, start a new terminal session for it to apply"
     else
-	echo "Existing $HOME/.profile already exists, so it has not been replaced. If you wish for this installer to install $HOME/.profile, please delete your existing one and run it again."
+	echo "Existing $HOME/.bash_profile already exists, so it has not been replaced. If you wish for this installer to install $HOME/.bash_profile, please delete your existing $HOME/.bash_profile and run "$0" again."
     fi
 }
 
 install_certs() {
-    mkdir -p $prefix/etc/ssl
-    cp -v bootstrap-src/$certs $prefix/etc/ssl/cacert.pem
+    mkdir -p $bootstrap/etc/ssl
+    cp -v bootstrap-src/$certs $bootstrap/etc/ssl/cacert.pem
     echo "$certs installed!"
 }
 
-# TODO: x86_64. Even 10.12 says arch is i386 so can't use it as is. Test ppc64 on tiger server.
-if [ "$arch" == ppc ]; then
+if [[ "$arch" == ppc ]]; then
     ssl_config_val=darwin-ppc-cc
-elif [ "$arch" == ppc64 ]; then
-    ssl_config_val=darwin64-ppc-cc
-elif [ "$arch" == i386 ]; then
+elif [[ "$arch" == i386 ]]; then
     ssl_config_val=darwin-i386-cc
 else
     echo "Error: unsupported $arch"
@@ -72,7 +74,11 @@ fi
 # CA certificates extracted from Mozilla 
 # https://curl.se/docs/caextract.html
 # Note: These can be updated via http. Perhaps implement that.
-if [ -e "/opt/local/bootstrap/bin/curl" ] && [ "$force_bootstrap_rebuild" = false ] && [ "$1" != "-f" ]; then
+if [[ -e "$bootstrap/bin/make" ]] && \
+    [[ -e "$bootstrap/bin/openssl" ]] && \
+    [[ -e "$bootstrap/bin/curl" ]] && \
+    [[ "$force_bootstrap_rebuild" = "false" ]] && \
+    [[ "$1" != "-f" ]]; then
     echo "Skipping full rebuild of bootstrap software as it is not needed."
     echo "Note: if you want to force rebuilding all bootstrap software anyways, pass the -f arg:"
     echo "./bootstrap -f"
@@ -80,7 +86,8 @@ if [ -e "/opt/local/bootstrap/bin/curl" ] && [ "$force_bootstrap_rebuild" = fals
     build_base
     exit 0
 else
-    rm -rf $prefix
+    # Delete bootstrap subdir to start clean.
+    rm -rf $bootstrap
     install_certs
 fi
 
@@ -89,15 +96,15 @@ tar zxf bootstrap-src/$make.tar.gz -C $tmp
     cd $tmp/$make
 
     ./configure \
-        --prefix=$prefix
+        --prefix=$bootstrap
 
     make -j$number_of_cpus
     make install
 )
 
 # We want to use the new Make for better parallel support.
-export PATH=$prefix/bin:/bin:/sbin:/usr/bin:/usr/sbin
-
+export PATH=$bootstrap/bin:/bin:/sbin:/usr/bin:/usr/sbin
+which make
 # OpenSSL 1.1.1x needs Perl 5.8.6 which tiger does not have, and bootstrap doesn't build (yet).
 # OpenSSL 1.0.2 gets us TLSv1.2, which is good enough for gitlab, github, and most distfile sites for now in 2026.
 # OpenSSL 1.1.1x will get us to TLSv1.3 if/when that is implemented in bootstrap.
@@ -114,8 +121,8 @@ tar zxf bootstrap-src/$ssl.tar.gz -C $tmp
     cd $tmp/$ssl
 
     ./Configure \
-        --prefix=$prefix \
-        --openssldir=$prefix \
+        --prefix=$bootstrap \
+        --openssldir=$bootstrap \
         enable-shared \
         zlib-dynamic \
 	no-async \
@@ -136,11 +143,11 @@ tar jxf bootstrap-src/$curl.tar.bz2 -C $tmp
 (
     cd $tmp/$curl
     ./configure \
-        CPPFLAGS="-I$prefix/include" \
-        LDFLAGS="-L$prefix/lib" \
-        --prefix=$prefix \
-        --with-ssl=$prefix \
-        --with-ca-bundle=$prefix/etc/ssl/cacert.pem \
+        CPPFLAGS="-I$bootstrap/include" \
+        LDFLAGS="-L$bootstrap/lib" \
+        --prefix=$bootstrap \
+        --with-ssl=$bootstrap \
+        --with-ca-bundle=$bootstrap/etc/ssl/cacert.pem \
         --without-zlib \
         --without-libpsl \
         ac_cv_path_PKGCONFIG="no"

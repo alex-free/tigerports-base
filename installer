@@ -43,8 +43,10 @@ cleanup()
 trap cleanup EXIT
 
 # Sets prefix, curl, and make to be used.
+# Setting --with-make= breaks some legacy apple build systems so avoid it like the plauge.
+# Note: Every Xcode from leopard to sierra (maybe higher even) uses gnumake 3.81 due to GPLv3, so it could make sense to use that instead of the latest like we do here. Tiger Xcode 2.5 has GNUMake 3.80 which can't even build base from upstream macports anymore, and has syntax parsing issues with most modern software hence the replacement of system wide gnumake here.
 build_base() {
-    ./configure --prefix=$prefix --with-curlprefix=$bootstrap --with-gnumake=$bootstrap/bin/make  --with-make=$bootstrap/bin/make
+    ./configure --prefix=$prefix --with-curlprefix=$bootstrap --with-gnumake=$bootstrap/bin/make
     make -j$number_of_cpus
     make install
     

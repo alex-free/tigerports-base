@@ -25,6 +25,7 @@ ssl=openssl-1.0.2u
 curl=curl-8.17.0
 certs=cacert-2026-08-13.pem
 make=make-4.4.1
+bzip=bzip-1.0.8
 
 arch=$(arch)
 number_of_cpus=$(sysctl -n hw.ncpu)
@@ -107,6 +108,16 @@ tar zxf bootstrap-src/$make.tar.gz -C $tmp
 # We want to use the new Make for better parallel support.
 export PATH=$bootstrap/bin:/bin:/sbin:/usr/bin:/usr/sbin
 which make
+
+
+tar zxf bootstrap-src/$bzip.tar.gz -C $tmp
+(
+    cd $tmp/$bzip
+
+    make -j$number_of_cpus
+    make install PREFIX=$bootstrap
+)
+
 # OpenSSL 1.1.1x needs Perl 5.8.6 which tiger does not have, and bootstrap doesn't build (yet).
 # OpenSSL 1.0.2 gets us TLSv1.2, which is good enough for gitlab, github, and most distfile sites for now in 2026.
 # OpenSSL 1.1.1x will get us to TLSv1.3 if/when that is implemented in bootstrap.

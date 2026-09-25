@@ -2,7 +2,9 @@ v2.12.04.004 - 9/25/2026
 
 * Updated base, archives, and ports to use new signify keys. This breaks selfupdate from lower versions of tigerports-base for this version, so you must use the tarball to get to this release (future versions are not affected).
 
-* Removed obsolete tiger system libcurl code that hasn't been used in many releases of tigerports-base since the bootstrap system has been put into place, matching upstream macports-base.
+* Removed obsolete tiger system libcurl code in src/pextlib1.0/curl.c (we use our own curl). 
+
+* Removed obsolete bzip2 tiger workaround in src/port1.0/portutil.tcl (we use our own bzip2).
 
 v2.12.04.003 - 9/22/2026
 

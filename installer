@@ -21,11 +21,25 @@ export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 prefix=/opt/local
 bootstrap=$prefix/bootstrap
 
+# Last version that builds without requiring a newer perl (5.8.6). Will probably# change this to 1.1.1 to get TLS v1.3 support and just add perl to bootstrap.
 ssl=openssl-1.0.2u
+
+# Last version to support OpenSSL v1.x.
 curl=curl-8.17.0
+
 certs=cacert-2026-08-13.pem
-make=make-4.4.1
-bzip=bzip-1.0.8
+
+# Straight from open source apple for 10.5.8, builds without modification.
+make=gnumake-119
+
+# Latest versions:
+bzip=bzip2-1.0.8
+gzip=gzip-1.15
+
+# Same versions as 10.5.8 (but we don't use open source apple releases from
+# Apple (yet) as they need quite a bit of patching.
+tar=tar-1.15.1
+libarchive=libarchive-2.8.3
 
 arch=$(arch)
 number_of_cpus=$(sysctl -n hw.ncpu)
@@ -44,17 +58,18 @@ cleanup()
 trap cleanup EXIT
 
 # Sets prefix, curl, and make to be used.
-# Setting --with-make= breaks some legacy apple build systems so avoid it like the plauge.
-# Note: Every Xcode from leopard to sierra (maybe higher even) uses gnumake 3.81 due to GPLv3, so it could make sense to use that instead of the latest like we do here. Tiger Xcode 2.5 has GNUMake 3.80 which can't even build base from upstream macports anymore, and has syntax parsing issues with most modern software hence the replacement of system wide gnumake here.
+# We simulate leopard (and it didn't even really change even at sierra).
 build_base() {
     ./configure \
         --prefix=$prefix \
         --with-curlprefix=$bootstrap \
         --with-gnumake=$bootstrap/bin/make \
-        --with-bzip2_bin=$bootstrap/bin/bzip2
+        --with-make=$bootstrap/bin/make \
+        --with-bzip2_bin=$bootstrap/bin/bzip2 \
+        --with-tar=$bootstrap/bin/bsdtar \
+        --with-gnutar=$bootstrap/bin/tar
 
-    make -j$number_of_cpus
-    make install
+    make_and_install
     
     if [[ ! -e "~/.bash_profile" ]]; then
         echo "source $prefix/share/macports/setupenv.bash" > ~/.bash_profile
@@ -86,6 +101,9 @@ if [[ -e "$bootstrap/bin/make" ]] && \
     [[ -e "$bootstrap/bin/openssl" ]] && \
     [[ -e "$bootstrap/bin/curl" ]] && \
     [[ -e "$bootstrap/bin/bzip2" ]] && \
+    [[ -e "$bootstrap/bin/gzip" ]] && \
+    [[ -e "$bootstrap/bin/tar" ]] && \
+    [[ -e "$bootstrap/bin/bsdtar" ]] && \
     [[ "$force_bootstrap_rebuild" = "false" ]] && \
     [[ "$1" != "-f" ]]; then
     echo "Skipping full rebuild of bootstrap software as it is not needed."
@@ -100,15 +118,23 @@ else
     install_certs
 fi
 
+echo "Building bootstrap..."
+set -e
+
+make_and_install() {
+    make -j$number_of_cpus && make install PREFIX=$bootstrap
+}
+
+# Patch for patch, bug for bug compatible, directly from open source apple circa 2009 for leopard:
+# https://web.archive.org/web/20110707153724/https://opensource.apple.com/release/mac-os-x-1058/
+# This uses Apple build infra, so make clean just makes sure /tmp/gnumake is clear.
 tar zxf bootstrap-src/$make.tar.gz -C $tmp
 (
     cd $tmp/$make
-
-    ./configure \
-        --prefix=$bootstrap
-
-    make -j$number_of_cpus
-    make install
+    make clean
+    make
+    mkdir $bootstrap/bin
+    cp -v /tmp/gnumake/Build/make $bootstrap/bin/make
 )
 
 # We want to use the new Make for better parallel support.
@@ -122,6 +148,35 @@ tar zxf bootstrap-src/$bzip.tar.gz -C $tmp
 
     make -j$number_of_cpus
     make install PREFIX=$bootstrap
+)
+
+tar zxf bootstrap-src/$gzip.tar.gz -C $tmp
+(
+    cd $tmp/$gzip
+    ./configure \
+        --prefix=$bootstap
+
+     make_and_install
+)
+
+# Goes off '$PATH' to pull gzip/bzip2, so we already fixed that to use newer make.
+tar zxf bootstrap-src/$tar.tar.gz -C $tmp
+(
+    cd $tmp/$tar
+    ./configure \
+        --prefix=$bootstrap
+
+    make_and_install
+)
+
+# This actually is the bsdtar command for 10.5+.
+tar zxf bootstrap-src/$libarchive.tar.gz -C $tmp
+(
+    cd $tmp/$libarchive
+    ./configure \
+        --prefix=$bootstrap \
+
+    make_and_install
 )
 
 # OpenSSL 1.1.1x needs Perl 5.8.6 which tiger does not have, and bootstrap doesn't build (yet).
@@ -170,8 +225,8 @@ tar jxf bootstrap-src/$curl.tar.bz2 -C $tmp
         --without-zlib \
         --without-libpsl \
         ac_cv_path_PKGCONFIG="no"
-    make -j$number_of_cpus
-    make install
+
+    make_and_install
 )
 
 build_base

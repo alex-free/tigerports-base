@@ -425,12 +425,27 @@ proc selfupdate::install {source} {
     }
     ui_debug "Permissions OK"
 
-    set configure_args [list \
-                        --prefix=$prefix \
-                        --with-curl-prefix=$prefix/bootstrap \
-                        --with-install-user=$owner \
-                        --with-install-group=$group \
-                        --with-directory-mode=$perms]
+    if {$os_major == 8} {
+
+        set configure_args [list \
+                            --prefix=$prefix \
+                            --with-install-user=$owner \
+                            --with-install-group=$group \
+                            --with-directory-mode=$perms \
+                            --with-curl-prefix=$prefix/bootstrap \
+                            --with-gnumake=$prefix/bootstrap/bin/make \
+                            --with-make=$prefix/bootstrap/bin/make \
+                            --with-bzip2_bin=$prefix/bootstrap/bin/bzip2 \
+                            --with-tar=$prefix/bootstrap/bin/bsdtar \
+                            --with-gnutar=$prefix/bootstrap/bin/tar]
+    } else {
+        set configure_args [list \
+                            --prefix=$prefix \
+                            --with-curl-prefix=$prefix/bootstrap \
+                            --with-install-user=$owner \
+                            --with-install-group=$group \
+                            --with-directory-mode=$perms]
+    }
 
     # too many users have an incompatible readline in /usr/local, see ticket #10651
     if {$os_platform ne "darwin" || $prefix eq "/usr/local"
@@ -490,10 +505,17 @@ proc selfupdate::install {source} {
         }
     }
 
+    # Tiger Xcode 2.5 GNUMake 3.80 is too old.
+    if {$os_major > 8} {
+        make=/usr/bin/make
+    } else {
+        make=/opt/local/bootstrap/bin/make
+    }
+
     # do the actual configure, build and installation of new base
     ui_msg "$ui_prefix Installing new MacPorts release in $prefix as ${owner}:${group}; permissions ${perms}"
     macports_try -pass_signal {
-        system -W $source "./installer"
+        system -W $source "${arch_arg}${cc_arg}${sdk_arg}./configure $configure_args_string && ${arch_arg}${sdk_arg}${make} -j${jobs} SELFUPDATING=1 && ${arch_arg}${make} install SELFUPDATING=1"
     } on error {eMessage} {
         error "Error installing new MacPorts base: $eMessage"
     }

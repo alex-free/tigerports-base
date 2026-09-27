@@ -6,6 +6,10 @@ v2.12.04.004 - 9/25/2026
 
 * Removed obsolete bzip2 tiger workaround in src/port1.0/portutil.tcl (we use our own bzip2).
 
+* Now uses tar v1.15.1 (not the apple version).
+
+* Now uses gnumake-119 (straight from open source apple for leopard: https://web.archive.org/web/20110707153724/https://opensource.apple.com/release/mac-os-x-1058/) as system make. This fixes ports that need an apple patch gnumake to build, and keeps us at parity with even sierra in capability (as Apple never moved off gnumake v3.81 even then because of not wanting GPL v3).
+
 v2.12.04.003 - 9/22/2026
 
 * BUILD INSTRUCTIONS HAVE CHANGED. Everything is now handled by one script, run sudo ./installer to build the bootstrap, configure the base, build the base, and install the base, all in one command.

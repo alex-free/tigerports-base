@@ -26,6 +26,8 @@ To setup your $PATH and envars, you can now do:
 
 * bootstrap_configure.sh: now doesn't run everything as root blindly, and preserves privleges. It will prompt you with sudo automatically when/if neccesary depending on what the specified prefix is for base.
 
+* Restored gnumake 3.80 compatibility for base (it just makes sense to keep base itself working on 3.80, as moving to use bootstrap gnumake3.81 from leopard to build base itself adds alot of complexity).
+
 v2.12.04.003 - 9/22/2026
 
 * BUILD INSTRUCTIONS HAVE CHANGED. Everything is now handled by one script, run sudo ./installer to build the bootstrap, configure the base, build the base, and install the base, all in one command.

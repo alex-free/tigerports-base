@@ -29,7 +29,7 @@ do
             bootstrap_rebuild=true 
             ;;
         -f)
-            bootstrap_rebuild=true      
+            bootstrap_rebuild=true
             ;;
     esac
 done
@@ -73,7 +73,6 @@ chmod -R 777 $tmp
 cleanup() 
 { 
     if [[ -e $tmp ]]; then
-        echo "Clearing temp files..."  
         rm -rf $tmp   
     fi
 }
@@ -135,12 +134,12 @@ fi
 rebuild_bootstrap=true
 if [[ "$tiger" == "true" ]]; then
     if [[ ! -e "$bootstrap/bin/make" ]] || \
-        [[ ! -e "$bootstrap/bin/openssl" ]] || \
-        [[ ! -e "$bootstrap/bin/curl" ]] || \
-        [[ ! -e "$bootstrap/bin/bzip2" ]] || \
-        [[ ! -e "$bootstrap/bin/gzip" ]] || \
-        [[ ! -e "$bootstrap/bin/tar" ]] || \
-        [[ ! -e "$bootstrap/bin/bsdtar" ]]; then 
+       [[ ! -e "$bootstrap/bin/openssl" ]] || \
+       [[ ! -e "$bootstrap/bin/curl" ]] || \
+       [[ ! -e "$bootstrap/bin/bzip2" ]] || \
+       [[ ! -e "$bootstrap/bin/gzip" ]] || \
+       [[ ! -e "$bootstrap/bin/tar" ]] || \
+       [[ ! -e "$bootstrap/bin/bsdtar" ]]; then 
             rebuild_bootstrap=true
     fi 
 else
@@ -174,14 +173,14 @@ fi
 # OpenSSL 1.1.1x will get us to TLSv1.3 if/when that is implemented in bootstrap.
 # Using install_sw target skips docs that we don't need and take forever to generate.
 # Mac OS X needs Configure not config, so we need to pass it the value it wants.
-# Tiger Intel fails on asm so disable it.                     
-# Tiger fails on async so disable it.                         
-# Tiger fails on threads so disable it.                       
-# Mac OS X ships with shared zlib.                            
+# Tiger Intel fails on asm so disable it.
+# Tiger fails on async so disable it.
+# Tiger fails on threads so disable it.
+# Mac OS X ships with shared zlib.
 echo "Building $ssl..."
-tar zxf bootstrap-src/$ssl.tar.gz -C $tmp                     
-(                                                             
-    cd $tmp/$ssl                                              
+tar zxf bootstrap-src/$ssl.tar.gz -C $tmp 
+(
+    cd $tmp/$ssl
 
     ./Configure \
         --prefix=$bootstrap \
@@ -193,34 +192,34 @@ tar zxf bootstrap-src/$ssl.tar.gz -C $tmp
         no-asm \
         $ssl_config_val
 
-    make -j$number_of_cpus                                    
+    make -j$number_of_cpus
     
     if [[ "$sudo_needed" == "true" ]]; then
         sudo make install_sw
     else
-        make install_sw                                           
+        make install_sw
     fi
-)                                                             
-                                                              
+)
+
 # Last version of Curl that can use OpenSSL 1.1.1.x.
 # The last version of Curl that can use Tiger system zlib is 8.11.0, but it
 # segfaults with it enabled.
 # Bootstrap doesn't (yet) build zlib, so disable zlib for now.
 # Disable libpsl because Mac OS X doesn't ship with it.
 echo "Building $curl..."
-tar jxf bootstrap-src/$curl.tar.bz2 -C $tmp                   
-(                                                             
-    cd $tmp/$curl                                             
-    ./configure \                                             
-        CPPFLAGS="-I$bootstrap/include" \                     
-        LDFLAGS="-L$bootstrap/lib" \                          
-        --prefix=$bootstrap \                                 
-        --with-ssl=$bootstrap \                               
-        --with-ca-bundle=$bootstrap/etc/ssl/cacert.pem \      
-        --without-zlib \                                      
-        --without-libpsl                                  
-                                                              
-    make_and_install                                          
+tar jxf bootstrap-src/$curl.tar.bz2 -C $tmp
+(
+    cd $tmp/$curl
+    ./configure \
+        CPPFLAGS="-I$bootstrap/include" \
+        LDFLAGS="-L$bootstrap/lib" \
+        --prefix=$bootstrap \
+        --with-ssl=$bootstrap \
+        --with-ca-bundle=$bootstrap/etc/ssl/cacert.pem \
+        --without-zlib \
+        --without-libpsl
+
+    make_and_install
 )
 
 # Everything after this is tiger specific...
@@ -242,7 +241,7 @@ tar zxf bootstrap-src/$make.tar.gz -C $tmp
     if [[ "$sudo_needed" == "true" ]]; then
         sudo cp -v /tmp/gnumake/Build/make $bootstrap/bin/make
     else
-        cp -v /tmp/gnumake/Build/make $bootstrap/bin/make    
+        cp -v /tmp/gnumake/Build/make $bootstrap/bin/make
     fi
 )
 

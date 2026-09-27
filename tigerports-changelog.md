@@ -1,14 +1,30 @@
-v2.12.04.004 - 9/25/2026
+v2.12.04.004 - 9/27/2026
 
 * Updated base, archives, and ports to use new signify keys. This breaks selfupdate from lower versions of tigerports-base for this version, so you must use the tarball to get to this release (future versions are not affected).
 
 * Removed obsolete tiger system libcurl code in src/pextlib1.0/curl.c (we use our own curl). 
 
-* Removed obsolete bzip2 tiger workaround in src/port1.0/portutil.tcl (we use our own bzip2).
+* Removed obsolete tar code for tiger system tar (we use our own tar/libarchive now).
 
-* Now uses tar v1.15.1 (not the apple version).
+* Bootstrap uses bzip2 v1.0.8 on tiger.
 
-* Now uses gnumake-119 (straight from open source apple for leopard: https://web.archive.org/web/20110707153724/https://opensource.apple.com/release/mac-os-x-1058/) as system make. This fixes ports that need an apple patch gnumake to build, and keeps us at parity with even sierra in capability (as Apple never moved off gnumake v3.81 even then because of not wanting GPL v3).
+* Bootstrap uses gzip v1.15 on Tiger.
+
+* Bootstrap uses gnutar v1.15.1 on tiger.
+
+* Bootstrap uses gnumake-119 (straight from open source apple for leopard: https://web.archive.org/web/20110707153724/https://opensource.apple.com/release/mac-os-x-1058/) as system make. This fixes ports that need an apple patch gnumake to build, and keeps us at parity with even sierra in capability (as Apple never moved off gnumake v3.81 even then because of not wanting GPL v3).
+
+* New build instructions/selfupdate functions implemented. Now do:
+
+./bootstrap_configure.sh && make && sudo make install
+
+To setup your $PATH and envars, you can now do:
+
+./upath.sh
+
+* bootstrap_configure.sh: now supports custom prefixes (pass --prefix=/whatever/you/want). 
+
+* bootstrap_configure.sh: now doesn't run everything as root blindly, and preserves privleges. It will prompt you with sudo automatically when/if neccesary depending on what the specified prefix is for base.
 
 v2.12.04.003 - 9/22/2026
 

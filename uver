@@ -1,6 +1,15 @@
 #!/bin/bash
 
-version="$1"
+base_sec=~/dev/tigerports-keys/tigerports-base-2027.sec
+version=2.12.04.004
+
+if [[ ! -e "$base_sec" ]]; then
+    echo "Error: can not find $base_sec"
+    exit 1
+fi
+
+read -p "this will commit a $version tag and new commit to git, press any key to procceed"
+
 echo "Using version: $1"
 
 echo "Updating tigerports-base version in config/macports_version..."
@@ -29,4 +38,4 @@ git push origin v$version
 
 echo "Building release tarballs..."
 make -C vendor
-make dist DISTVER=$version DISTKEY=~/dev/tigerports-keys/tigerports-base-2026.sec
+make dist DISTVER=$version DISTKEY=$base_sec

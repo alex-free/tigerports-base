@@ -68,7 +68,7 @@ proc portpatch::build_getpatchtype {args} {
 }
 
 proc portpatch::patch_main {args} {
-    global UI_PREFIX target_state_fd
+    global UI_PREFIX
 
     # First make sure that patchfiles exists and isn't stubbed out.
     if {![exists patchfiles] || [option patchfiles] eq ""} {

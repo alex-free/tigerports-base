@@ -89,6 +89,7 @@ configure_base() {
             --with-tar=$bootstrap/bin/bsdtar \
             --with-gnutar=$bootstrap/bin/tar
     else
+        ./configure \
             --prefix=$prefix \
             --with-curlprefix=$bootstrap
     fi
@@ -264,7 +265,7 @@ tar zxf bootstrap-src/$gzip.tar.gz -C $tmp
 (
     cd $tmp/$gzip
     ./configure \
-        --prefix=$bootstap
+        --prefix=$bootstrap
 
      make_and_install
 )

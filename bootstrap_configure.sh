@@ -4,7 +4,7 @@ set -e
 # Typically, if all software bootstrap installs for the OS X version is already
 # found bootstrap won't rebuild all of them, unless $bootstrap_rebuld=true
 # or if -f is passed to this script.
-bootstrap_rebuild=false
+rebuild_bootstrap=false
 
 cd "$(dirname "$0")"
 echo $PWD
@@ -132,7 +132,6 @@ else
     exit 1
 fi
 
-rebuild_bootstrap=true
 if [[ "$tiger" == "true" ]]; then
     if [[ ! -e "$bootstrap/bin/make" ]] || \
        [[ ! -e "$bootstrap/bin/openssl" ]] || \

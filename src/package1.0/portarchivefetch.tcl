@@ -243,7 +243,6 @@ proc portarchivefetch::fetchfiles {{async no} args} {
     variable archivefetch_urls
     variable ::portfetch::urlmap
     variable async_job
-    variable async_logid
 
     if {[info exists async_job]} {
         if {$async} {
@@ -354,7 +353,7 @@ proc portarchivefetch::fetchfiles {{async no} args} {
             if {$async_done} {
                 foreach sigtype $sigtypes {
                     set signature ${incoming_path}/${archive}.${sigtype}
-                    if {[file isfile $signature] && [file size $signature] > 0} {
+                    if {[file isfile $signature]} {
                         set sig_fetched 1
                         break
                     }
@@ -382,7 +381,7 @@ proc portarchivefetch::fetchfiles {{async no} args} {
                 set jobid [curlwrap_async fetch_archive $credentials $fetch_options $this_urlmap \
                         [lmap site $this_urlmap {portfetch::assemble_url \
                         [expr {[string index $site end] eq "/" ? $site : "${site}/"}]${archive.subdir} $archive}] \
-                        ${incoming_path}/${archive} $sigtypes $maxfails $async_logid]
+                        ${incoming_path}/${archive} $sigtypes $maxfails]
                 set async_job [list $jobid $tmpfiles]
                 return 0
             } else {
@@ -492,35 +491,14 @@ proc portarchivefetch::fetchfiles {{async no} args} {
     }
 }
 
-# Check if all archives are already present.
-proc portarchivefetch::archives_present {} {
-    global archivefetch.fulldestpath force_archive_refresh
-    variable archivefetch_urls
-
-    set include_installed [expr {![tbool force_archive_refresh]}]
-    set existing_archive [find_portarchive_path $include_installed]
-    if {$existing_archive eq "" && $include_installed
-        && [file isdirectory [file rootname [get_portimage_path]]]} {
-        set existing_archive yes
-    }
-
-    foreach {url_var archive} $archivefetch_urls {
-        if {![file isfile ${archivefetch.fulldestpath}/${archive}] && $existing_archive eq ""} {
-            return 0
-        }
-    }
-    return 1
-}
-
 # Start asynchronous fetch of archive
-proc portarchivefetch::archivefetch_async_start {logid} {
+proc portarchivefetch::archivefetch_async_start {} {
     global all_archive_files
     _archivefetch_start yes
     if {![info exists all_archive_files]} {
         # No files to fetch
         return 0
     }
-    variable async_logid $logid
     fetchfiles yes
 }
 
@@ -531,30 +509,6 @@ proc portarchivefetch::_async_cleanup {} {
         curlwrap_async_cancel $jobid
         file delete {*}$tmpfiles
         unset async_job
-    }
-}
-
-proc portarchivefetch::start_pings {} {
-    variable archivefetch_urls
-    variable ::portfetch::urlmap
-    # ping hosts that are not in the cache yet
-    foreach {url_var archive} $archivefetch_urls {
-        if {[info exists urlmap($url_var)]} {
-            async_ping_start $urlmap($url_var)
-        }
-    }
-    # wait until we have a result for at least the main mirror
-    global archive_sites
-    if {[lsearch $archive_sites macports_archives::*] != -1} {
-        set mirrors macports_archives
-    } else {
-        set mirrors [lindex [split [lindex $archive_sites 0] :] 0]
-    }
-    if {[info exists portfetch::mirror_sites::sites($mirrors)]} {
-        set primary_mirror [lindex $portfetch::mirror_sites::sites($mirrors) 0]
-        if {$primary_mirror ne {}} {
-            wait_for_pingtime $primary_mirror
-        }
     }
 }
 
@@ -590,9 +544,6 @@ proc portarchivefetch::_archivefetch_start {quiet} {
         portarchivefetch::checkfiles archivefetch_urls
     }
     if {[info exists all_archive_files] && [llength $all_archive_files] > 0} {
-        if {![archives_present]} {
-            start_pings
-        }
         if {!$quiet} {
             ui_msg "$UI_PREFIX [format [msgcat::mc "Fetching archive for %s"] $subport]"
         }

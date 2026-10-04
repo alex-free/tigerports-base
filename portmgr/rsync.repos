@@ -61,7 +61,6 @@
 #######
 
 
-
 [macports]
     comment = TigerPorts Infrastructure Base Namespace
     path = /var/www/html/macports

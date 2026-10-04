@@ -11,7 +11,6 @@ source ../macports_test_autoconf.tcl
 package require macports 1.0
 
 source ./library.tcl
-source ./init_tmp_prefix.tcl
 
 # clean leftovers from interrupted tests
 file delete -force $pwd/tmpdir

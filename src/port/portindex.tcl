@@ -435,7 +435,7 @@ if {[file isfile $outpath]} {
     set oldattrs [list -permissions 00644]
 }
 
-set fd [file tempfile tempportindex mports.portindex]
+set fd [file tempfile tempportindex mports.portindex.XXXXXXXX]
 
 # keys for a normal portindex
 set keepkeys [dict create]

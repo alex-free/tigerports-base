@@ -40,49 +40,50 @@ target_requires ${org.macports.lint} main
 target_prerun ${org.macports.lint} portlint::lint_start
 
 namespace eval portlint {
-    variable lint_portsystem \
-        "1.0"
-
-    variable lint_platforms [list \
-        "any" \
-        "darwin" \
-        "freebsd" \
-        "linux" \
-        "macosx" \
-        "netbsd" \
-        "openbsd" \
-        "puredarwin" \
-        "solaris" \
-        "sunos" \
-        ]
-    
-    variable lint_required [list \
-        "name" \
-        "version" \
-        "description" \
-        "long_description" \
-        "categories" \
-        "maintainers" \
-        "platforms" \
-        "homepage" \
-        "master_sites" \
-        "checksums" \
-        "license" \
-        ]
-    
-    variable lint_optional [list \
-        "epoch" \
-        "revision" \
-        "worksrcdir" \
-        "distname" \
-        "use_automake" \
-        "use_autoconf" \
-        "use_autoreconf" \
-        "use_configure" \
-        ]
 }
 
 set_ui_prefix
+
+set lint_portsystem \
+    "1.0"
+
+set lint_platforms [list \
+    "any" \
+    "darwin" \
+    "freebsd" \
+    "linux" \
+    "macosx" \
+    "netbsd" \
+    "openbsd" \
+    "puredarwin" \
+    "solaris" \
+    "sunos" \
+    ]
+
+set lint_required [list \
+    "name" \
+    "version" \
+    "description" \
+    "long_description" \
+    "categories" \
+    "maintainers" \
+    "platforms" \
+    "homepage" \
+    "master_sites" \
+    "checksums" \
+    "license"
+    ]
+
+set lint_optional [list \
+    "epoch" \
+    "revision" \
+    "worksrcdir" \
+    "distname" \
+    "use_automake" \
+    "use_autoconf" \
+    "use_autoreconf" \
+    "use_configure" \
+    ]
 
 proc portlint::seems_utf8 {str} {
     set len [string length $str]
@@ -259,8 +260,7 @@ proc portlint::lint_platforms {platforms} {
     set errors [list]
     set warnings [list]
 
-    global name subport PortInfo
-    variable lint_platforms
+    global lint_platforms name subport PortInfo
 
     foreach platform $platforms {
         set platname [lindex $platform 0]
@@ -286,8 +286,7 @@ proc portlint::lint_start {args} {
 }
 
 proc portlint::lint_main {args} {
-    global UI_PREFIX portpath ports_lint_nitpick
-    variable lint_required; variable lint_optional
+    global UI_PREFIX portpath ports_lint_nitpick lint_required lint_optional
     global {*}$lint_required {*}$lint_optional
     set portfile ${portpath}/Portfile
     set portdirs [split ${portpath} /]
@@ -527,9 +526,8 @@ proc portlint::lint_main {args} {
     global porturl portutil::all_variants patchfiles \
            depends_fetch depends_extract depends_patch \
            depends_lib depends_build depends_run \
-           depends_test distfiles fetch.type \
+           depends_test distfiles fetch.type lint_portsystem \
            replaced_by conflicts
-    variable lint_portsystem
     set portarch [get_canonical_archs]
 
     if {!$seen_portsystem} {

@@ -455,7 +455,6 @@ proc portfetch::fetchfiles {{async no} args} {
     variable fetch_urls
     variable urlmap
     variable async_jobs
-    variable async_logid
 
     if {$async} {
         if {[info exists async_jobs]} {
@@ -565,7 +564,7 @@ proc portfetch::fetchfiles {{async no} args} {
                 lappend async_jobs $distfile \
                     [curlwrap_async fetch_file $credentials $fetch_options $urlmap($url_var) \
                         [lmap site $urlmap($url_var) {portfetch::assemble_url $site $distfile}] \
-                        ${distpath}/${distfile} $async_logid]
+                        ${distpath}/${distfile}]
             } else {
                 unset -nocomplain fetched
                 set lastError ""
@@ -619,20 +618,8 @@ proc portfetch::fetch_addfilestomap {filemapname} {
     }
 }
 
-# Check if all distfiles are already present.
-proc portfetch::files_present {} {
-    global distpath
-    variable fetch_urls
-    foreach {url_var distfile} $fetch_urls {
-        if {![file isfile ${distpath}/${distfile}]} {
-            return 0
-        }
-    }
-    return 1
-}
-
 # Start asynchronous fetch of distfiles
-proc portfetch::fetch_async_start {logid} {
+proc portfetch::fetch_async_start {} {
     global all_dist_files fetch.type
     if {${fetch.type} ne "standard"} {
         # Async only supported for file fetches
@@ -643,12 +630,7 @@ proc portfetch::fetch_async_start {logid} {
         # No files to fetch
         return 0
     }
-    if {[files_present]} {
-        # Already fetched
-        return 0
-    }
     _fetch_start
-    variable async_logid $logid
     fetchfiles yes
 }
 
@@ -664,25 +646,6 @@ proc portfetch::_async_cleanup {} {
     }
 }
 
-proc portfetch::start_pings {} {
-    variable fetch_urls
-    variable urlmap
-    # ping hosts that are not in the cache yet
-    foreach {url_var distfile} $fetch_urls {
-        if {[info exists urlmap($url_var)]} {
-            async_ping_start $urlmap($url_var)
-        }
-    }
-    # wait until we have a result for at least the main mirror
-    global global_mirror_site
-    if {[info exists portfetch::mirror_sites::sites($global_mirror_site)]} {
-        set primary_mirror [lindex $portfetch::mirror_sites::sites($global_mirror_site) 0]
-        if {$primary_mirror ne {}} {
-            wait_for_pingtime $primary_mirror
-        }
-    }
-}
-
 # Initialize fetch target and call checkfiles.
 proc portfetch::fetch_init {args} {
     variable fetch_urls
@@ -693,11 +656,7 @@ proc portfetch::fetch_init {args} {
 }
 
 proc portfetch::_fetch_start {} {
-    global UI_PREFIX distpath all_dist_files
-
-    if {[info exists all_dist_files]} {
-        start_pings
-    }
+    global UI_PREFIX distpath
 
     # create and chown $distpath
     if {![file isdirectory $distpath]} {
@@ -731,10 +690,6 @@ proc portfetch::fetch_start {args} {
     }
 
     ui_notice "$UI_PREFIX [format [msgcat::mc "Fetching distfiles for %s"] $subport]"
-    if {[files_present]} {
-        # Already fetched
-        return 0
-    }
     _fetch_start
 }
 

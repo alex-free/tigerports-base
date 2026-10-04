@@ -21,7 +21,7 @@ distclean:: clean
 	rm -f Makefile
 
 test::
-	$(TEST_TCLSH) $(srcdir)/../tests/test.tcl -nocolor
+	$(TCLSH) $(srcdir)/../tests/test.tcl -nocolor
 
 install:: all
 	$(INSTALL) -d -o "${DSTUSR}" -g "${DSTGRP}" -m "${DSTMODE}" "${DESTDIR}${INSTALLDIR}"

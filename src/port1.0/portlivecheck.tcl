@@ -45,7 +45,7 @@ namespace eval portlivecheck {
 }
 
 # define options
-options livecheck.url livecheck.type livecheck.md5 livecheck.regex livecheck.branch livecheck.name livecheck.distname livecheck.version livecheck.ignore_sslcert livecheck.compression livecheck.curloptions livecheck.user_agent
+options livecheck.url livecheck.type livecheck.md5 livecheck.regex livecheck.branch livecheck.name livecheck.distname livecheck.version livecheck.ignore_sslcert livecheck.compression livecheck.curloptions
 
 # defaults
 default livecheck.url {$homepage}
@@ -59,69 +59,15 @@ default livecheck.version {$version}
 default livecheck.ignore_sslcert no
 default livecheck.compression yes
 default livecheck.curloptions [list --append-http-header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"]
-default livecheck.user_agent {}
 
-proc portlivecheck::livecheck_async_start {} {
-    _livecheck_main yes
-}
-
-proc portlivecheck::_async_cleanup {} {
-    variable async_job
-    if {[info exists async_job]} {
-        curlwrap_async_cancel $async_job
-        unset async_job
-    }
-    variable tempfilename
-    if {[info exists tempfilename]} {
-        file delete -force $tempfilename
-        unset tempfilename
-    }
-}
-
-proc portlivecheck::_livecheck_main {{async no}} {
+proc portlivecheck::livecheck_main {args} {
     global livecheck.url livecheck.type livecheck.md5 livecheck.regex livecheck.branch livecheck.name livecheck.distname livecheck.version \
            livecheck.ignore_sslcert \
            livecheck.compression \
            livecheck.curloptions \
-           livecheck.user_agent \
            git.cmd \
            homepage portpath \
            master_sites name subport
-
-    if {${livecheck.type} eq "none"} {
-        if {!$async} {
-            ui_debug "livecheck.type is none"
-        }
-        return 0
-    }
-
-    variable async_job
-    variable tempfilename
-
-    if {[info exists async_job]} {
-        if {$async} {
-            # Async fetch already started
-            return 0
-        }
-        # Fetch was started asynchronously, wait for job to finish
-        # Loop with a reasonable timeout so we don't wait too long
-        # to handle events like signals.
-        while {![curlwrap_async_is_complete $async_job 500]} {}
-        lassign [curlwrap_async_result $async_job] status result
-        unset async_job
-        if {$status != 0} {
-            ui_error "cannot check if $subport was updated ($result)"
-            file delete -force $tempfilename ${tempfilename}.TMP
-            unset tempfilename
-            return 0
-        }
-        # Async fetch code appends .TMP for in-progress files. No real
-        # need to rename it here when it's done.
-        append tempfilename .TMP
-        set async_done 1
-    } else {
-        set async_done 0
-    }
 
     set updated 0
     set updated_version "unknown"
@@ -131,17 +77,9 @@ proc portlivecheck::_livecheck_main {{async no}} {
         set livecheck.url {}
     }
 
-    if {![info exists tempfilename]} {
-        set tempfd [file tempfile tempfilename mports.livecheck]
-        if {$async} {
-            close $tempfd
-            unset tempfd
-        }
-    }
+    set tempfile [mktemp "/tmp/mports.livecheck.XXXXXXXX"]
 
-    if {!$async} {
-        ui_debug "Port (livecheck) version is ${livecheck.version}"
-    }
+    ui_debug "Port (livecheck) version is ${livecheck.version}"
 
     set curl_options ${livecheck.curloptions}
     if {[tbool livecheck.ignore_sslcert]} {
@@ -149,10 +87,6 @@ proc portlivecheck::_livecheck_main {{async no}} {
     }
     if {[tbool livecheck.compression]} {
         lappend curl_options "--enable-compression"
-    }
-    if {${livecheck.user_agent} ne ""} {
-        lappend curl_options "--user-agent"
-        lappend curl_options "${livecheck.user_agent}"
     }
 
     # Check _resources/port1.0/livecheck for available types.
@@ -211,39 +145,26 @@ proc portlivecheck::_livecheck_main {{async no}} {
         }
     }
 
-    if {$async && ${livecheck.type} ni {regex regexm md5}} {
-        return 0
-    }
-
     # de-escape livecheck.url
-    set livecheck.url_str [join ${livecheck.url}]
+    set livecheck.url [join ${livecheck.url}]
 
     switch ${livecheck.type} {
         "regex" -
         "regexm" {
             # single and multiline regex
-            if {!$async_done} {
-                ui_debug "Fetching ${livecheck.url_str}"
-                ui_debug "Using CURL options ${curl_options}"
-            }
-            if {$async} {
-                set async_job [curlwrap_async fetch_file {} $curl_options {} \
-                        [list ${livecheck.url_str}] $tempfilename]
-                return 0
-            }
+            ui_debug "Fetching ${livecheck.url}"
+            ui_debug "Using CURL options ${curl_options}"
             set updated -1
-            if {!$async_done && [catch {curl fetch {*}$curl_options ${livecheck.url_str} $tempfilename} error]} {
+            if {[catch {curl fetch {*}$curl_options ${livecheck.url} $tempfile} error]} {
                 ui_error "cannot check if $subport was updated ($error)"
             } else {
                 # let's extract the version from the file.
+                set chan [open $tempfile "r"]
                 set foundmatch 0
                 set the_re [join ${livecheck.regex}]
                 ui_debug "The regex is \"$the_re\""
-                if {![info exists tempfd]} {
-                    set tempfd [open $tempfilename r]
-                }
                 if {${livecheck.type} eq "regexm"} {
-                    set data [read $tempfd]
+                    set data [read $chan]
                     if {[regexp -nocase $the_re $data matched updated_version]} {
                         set foundmatch 1
                         ui_debug "The regex matched \"$matched\", extracted \"$updated_version\""
@@ -259,7 +180,7 @@ proc portlivecheck::_livecheck_main {{async no}} {
                     }
                 } else {
                     set updated_version 0
-                    while {[gets $tempfd line] >= 0} {
+                    while {[gets $chan line] >= 0} {
                         set lastoff 0
                         while {$lastoff >= 0 && [regexp -nocase -start $lastoff -indices $the_re $line offsets]} {
                             regexp -nocase -start $lastoff $the_re $line matched upver
@@ -283,28 +204,22 @@ proc portlivecheck::_livecheck_main {{async no}} {
                         }
                     }
                 }
+                close $chan
                 if {!$foundmatch} {
                     ui_error "cannot check if $subport was updated (regex didn't match)"
                 }
             }
         }
         "md5" {
-            if {!$async_done} {
-                ui_debug "Fetching ${livecheck.url_str}"
-            }
-            if {$async} {
-                set async_job [curlwrap_async fetch_file {} $curl_options {} \
-                        [list ${livecheck.url_str}] $tempfilename]
-                return 0
-            }
-            if {!$async_done && [catch {curl fetch {*}$curl_options ${livecheck.url_str} $tempfilename} error]} {
+            ui_debug "Fetching ${livecheck.url}"
+            if {[catch {curl fetch {*}$curl_options ${livecheck.url} $tempfile} error]} {
                 ui_error "cannot check if $subport was updated ($error)"
                 set updated -1
             } else {
                 # let's compute the md5 sum.
-                set dist_md5 [md5 file $tempfilename]
+                set dist_md5 [md5 file $tempfile]
                 if {$dist_md5 ne ${livecheck.md5}} {
-                    ui_debug "md5sum for ${livecheck.url_str}: $dist_md5"
+                    ui_debug "md5sum for ${livecheck.url}: $dist_md5"
                     set updated 1
                 }
             }
@@ -312,12 +227,12 @@ proc portlivecheck::_livecheck_main {{async no}} {
         "moddate" {
             set port_moddate [file mtime ${portpath}/Portfile]
             ui_debug "Portfile modification date is [clock format $port_moddate]"
-            if {[catch {set updated [curl isnewer ${livecheck.url_str} $port_moddate]} error]} {
+            if {[catch {set updated [curl isnewer ${livecheck.url} $port_moddate]} error]} {
                 ui_error "cannot check if $subport was updated ($error)"
                 set updated -1
             } else {
                 if {!$updated} {
-                    ui_debug "${livecheck.url_str} is older than Portfile"
+                    ui_debug "${livecheck.url} is older than Portfile"
                 }
             }
         }
@@ -325,8 +240,8 @@ proc portlivecheck::_livecheck_main {{async no}} {
             if {${livecheck.branch} eq {}} {
                 set livecheck.branch "HEAD"
             }
-            ui_debug "Getting latest commit from ${livecheck.url_str} ${livecheck.branch}"
-            if {[catch {exec ${git.cmd} ls-remote ${livecheck.url_str} ${livecheck.branch}} result]} {
+            ui_debug "Getting latest commit from ${livecheck.url} ${livecheck.branch}"
+            if {[catch {exec ${git.cmd} ls-remote ${livecheck.url} ${livecheck.branch}} result]} {
                 ui_error "cannot check if $subport was updated ($result)"
                 set updated -1
             } else {
@@ -337,17 +252,13 @@ proc portlivecheck::_livecheck_main {{async no}} {
             }
         }
         "none" {
-            ui_debug "livecheck.type is none"
         }
         default {
             ui_error "unknown livecheck.type ${livecheck.type}"
         }
     }
 
-    if {[info exists tempfd]} {
-        close $tempfd
-    }
-    file delete -force $tempfilename
+    file delete -force $tempfile
 
     if {${livecheck.type} ne "none"} {
         if {$updated > 0} {
@@ -356,8 +267,4 @@ proc portlivecheck::_livecheck_main {{async no}} {
             ui_info "$subport seems to be up to date"
         }
     }
-}
-
-proc portlivecheck::livecheck_main {args} {
-    _livecheck_main no
 }

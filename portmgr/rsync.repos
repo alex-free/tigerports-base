@@ -75,3 +75,4 @@
 [trunk]
     comment = MacPorts rsync "trunk" repository, providing experimental MacPorts sources in svn's trunk/base.
     path = /var/www/html/macports/trunk
+

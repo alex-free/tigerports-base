@@ -1,7 +1,7 @@
 #!/bin/bash
 
 base_sec=~/dev/tigerports-keys/tigerports-base-2027.sec
-version=2.12.04.004
+version=2.12.6.1
 
 if [[ ! -e "$base_sec" ]]; then
     echo "Error: can not find $base_sec"
@@ -17,7 +17,7 @@ echo -e "$version\n" > config/macports_version
 cat config/macports_version
 
 echo "Updating tigerports-base version in config/RELEASE_URL..."
-echo -e "https://github.com/alex-free/tigerports-base/releases/tag/v$version\n" > config/RELEASE_URL
+echo -e "https://github.com/alex-free/tigerports-base/releases/tag/v$version" > config/RELEASE_URL
 cat config/RELEASE_URL
 
 echo "Building configure and manpages..."

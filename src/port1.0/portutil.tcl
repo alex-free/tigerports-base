@@ -1010,7 +1010,7 @@ proc reinplace {args}  {
         # absolute path, otherwise it is $dir/$file
         set file [file join $dir $file]
 
-        if {[catch {set tmpfd [file tempfile tmpfile ${tempdir}/[file tail $file].sed]} error]} {
+        if {[catch {set tmpfd [file tempfile tmpfile "${tempdir}/[file tail $file].sed.XXXXXXXX"]} error]} {
             ui_debug $::errorInfo
             ui_error "reinplace: $error"
             return -code error "reinplace failed"
@@ -3482,7 +3482,6 @@ proc portutil::_async_cleanup {} {
     }
     portfetch::_async_cleanup
     portarchivefetch::_async_cleanup
-    portlivecheck::_async_cleanup
 }
 
 proc portutil::_archive_available_ready {} {
@@ -3548,7 +3547,6 @@ proc portutil::_eval_archive_available {{async no}} {
         set archive_available_result 0
         return
     }
-    package require uri
     set archivetype $portfetch::mirror_sites::archive_type($mirrors)
     if {[info exists portfetch::mirror_sites::archive_sigtype($mirrors)]} {
         set sigtype $portfetch::mirror_sites::archive_sigtype($mirrors)
@@ -3563,34 +3561,32 @@ proc portutil::_eval_archive_available {{async no}} {
     # grab first site, should conventionally be the master mirror
     set primary_mirror [lindex $portfetch::mirror_sites::sites($mirrors) 0]
     # Find mirror with fastest cached ping time
-    set primary_mirror_parts [::uri::split $primary_mirror]
-    set best_ping 10000
-    if {[dict exists $primary_mirror_parts scheme] && [dict get $primary_mirror_parts scheme] eq "file"} {
-        set best_ping -1
-    } elseif {[dict exists $primary_mirror_parts host]} {
-        lassign [get_pingtime [dict get $primary_mirror_parts host]] status best_ping
-        if {$status == 2} {
-            set best_ping 0
-        }
+    global portfetch::hostregex
+    if {[regexp $hostregex $primary_mirror -> primary_host]} {
+        set best_ping [get_pingtime $primary_host]
+    } elseif {[string match file://* $primary_mirror]} {
+        set best_ping 0
+    } else {
+        set best_ping {}
     }
-    if {$best_ping >= 0} {
-        set fastest_mirror $primary_mirror
+    set fastest_mirror {}
+    set best_ping [expr {$best_ping ne {} && $best_ping != -1 ? $best_ping : 10000}]
+    if {$best_ping > 0} {
         foreach mirror [lrange $portfetch::mirror_sites::sites($mirrors) 1 end] {
-            if {[compare_pingtimes $mirror $fastest_mirror] < 0} {
-                set fastest_mirror $mirror
-                set mirror_parts [::uri::split $mirror]
-                if {[dict exists $mirror_parts scheme] && [dict get $mirror_parts scheme] eq "file"} {
-                    break
-                }
-                lassign [get_pingtime [dict get $mirror_parts host]] status cur_ping
-                if {$status == 2} {
-                    break
+            if {[regexp $hostregex $mirror -> cur_host]} {
+                set cur_ping [get_pingtime $cur_host]
+                if {$cur_ping ne {} && $cur_ping >= 0 && $cur_ping < $best_ping} {
+                    set best_ping $cur_ping
+                    set fastest_mirror $mirror
+                    if {$cur_ping == 0} {
+                        break
+                    }
                 }
             }
         }
-        if {$fastest_mirror ne $primary_mirror} {
-            lappend sites_entries $fastest_mirror
-        }
+    }
+    if {$fastest_mirror ne {}} {
+        lappend sites_entries $fastest_mirror
     }
     lappend sites_entries $primary_mirror
     # Build list of URLs to check for the archive and its signature.

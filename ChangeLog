@@ -2,10 +2,26 @@
 # This is a log of major user-visible changes in each MacPorts release.
 ###
 
-Release 2.13.0 (unreleased)
-    - Added a -T flag to prepend ISO 8601 timestamps to each line of
-      output, and elapsed time logging for each phase.
-      (#2020, herbygillot in 037d168)
+Release 2.12.6 (2026-08-26 by jmr)
+    - Fixed potential unreliable application of network proxy settings
+      with background fetches. (jmr in 6d9edb0)
+
+    - Fixed occasional failure to sync the PortIndex, which required
+      portindex to run locally. (fhgwright in 928dc47)
+
+    - Added documentation for the 'none' option for 'port select'.
+      (cvengler in 1552e82)
+
+    - Various reliability improvements for trace mode.
+      (cal in 6dda4cc, 1db3e7f, bea36d7)
+
+Release 2.12.5 (2026-04-22 by jmr)
+    - Fixed upgrade --force sometimes failing when an archive cannot be
+      fetched, instead of falling back to building from source.
+      (#73659, jmr in 737d844)
+
+    - Ensure that 'port clean --archive' also removes all associated
+      signature files if present. (jmr in 3e46372)
 
 Release 2.12.4 (2026-03-18 by jmr)
     - Fixed occasional lchown errors when upgrading ports.

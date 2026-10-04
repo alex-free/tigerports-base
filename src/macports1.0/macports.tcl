@@ -43,7 +43,6 @@ package require snapshot 1.0
 package require restore 1.0
 package require migrate 1.0
 package require Tclx
-package require uri
 
 # catch wrapper shared with port1.0
 package require mpcommon 1.0
@@ -109,17 +108,11 @@ namespace eval macports {
     variable open_mports [dict create]
 
     variable ui_priorities [list error warn msg notice info debug any]
-    variable ui_priority_prefixes [dict create]
     variable current_phase main
-    variable phase_start_ms {}
-    variable current_log_mport {}
-    variable pending_log_messages [dict create]
 
     variable ui_prefix {---> }
-    variable log_timestamp_format {%Y-%m-%dT%T%z}
 
     variable cache_dirty [dict create]
-    variable pending_pings [dict create]
     variable tool_path_cache [dict create]
     variable variant_descriptions [dict create]
 
@@ -246,7 +239,6 @@ proc macports::init_logging {mport} {
         return 1
     }
     macports::_log_sysinfo
-    log_pending_messages $mport
     return 0
 }
 
@@ -263,8 +255,6 @@ proc macports::ch_logging {mport} {
     # Append to the file if it already exists
     set debuglog [open $debuglogname a]
     puts $debuglog version:1
-
-    variable current_log_mport $mport
 
     ui_debug "Starting logging for $portname @[dict get $portinfo version]_[dict get $portinfo revision][dict get $portinfo canonical_active_variants]"
 }
@@ -315,7 +305,7 @@ proc macports::push_log {mport} {
     if {![info exists logenabled]} {
         if {[macports::init_logging $mport] == 0} {
             set logenabled yes
-            set logstack [list [list $debuglog $debuglogname $mport]]
+            set logstack [list [list $debuglog $debuglogname]]
             return
         } else {
             set logenabled no
@@ -323,7 +313,7 @@ proc macports::push_log {mport} {
     }
     if {$logenabled} {
         if {[macports::init_logging $mport] == 0} {
-            lappend logstack [list $debuglog $debuglogname $mport]
+            lappend logstack [list $debuglog $debuglogname]
         }
     }
 }
@@ -336,85 +326,27 @@ proc macports::pop_log {} {
     variable logstack
     if {$logenabled && [llength $logstack] > 0} {
         variable debuglog; variable debuglogname
-        variable current_log_mport
         close $debuglog
         set logstack [lreplace ${logstack}[set logstack {}] end end]
         if {[llength $logstack] > 0} {
-            lassign [lindex $logstack end] debuglog debuglogname current_log_mport
-            log_pending_messages $current_log_mport
+            lassign [lindex $logstack end] debuglog debuglogname
         } else {
             unset debuglog
             unset debuglogname
-            set current_log_mport {}
         }
     }
 }
 
 proc set_phase {phase} {
     global macports::current_phase
-    set now_ms [clock milliseconds]
-
-    if {$::macports::phase_start_ms ne {} && $current_phase ne "main"} {
-        set elapsed_ms [expr {$now_ms - $::macports::phase_start_ms}]
-        ui_debug "Phase $current_phase completed in [format "%.3f" [expr {$elapsed_ms / 1000.0}]] seconds"
-    }
-
     set current_phase $phase
-
     if {$phase ne "main"} {
-        set ::macports::phase_start_ms $now_ms
-        set sec [expr {$now_ms / 1000}]
-        set fraction [format "%.3u" [expr {$now_ms % 1000}]]
+        set ms [clock milliseconds]
+        set sec [expr {$ms / 1000}]
+        set fraction [format "%.3u" [expr {$ms % 1000}]]
         set utc_time [clock format $sec -timezone :UTC -format "%Y-%m-%dT%T.${fraction}%z"]
         set local_time [clock format $sec -format {%+}]
         ui_debug "$phase phase started at $utc_time ($local_time)"
-    } else {
-        set ::macports::phase_start_ms {}
-    }
-}
-
-proc macports::log_pending_messages {mport} {
-    variable pending_log_messages
-    if {![dict exists $pending_log_messages $mport]} {
-        return
-    }
-    variable debuglog
-    foreach m [dict get $pending_log_messages $mport] {
-        lassign $m priority phase msg
-        set strprefix ":${priority}:${phase} "
-        foreach str [split $msg "\n"] {
-            puts $debuglog ${strprefix}${str}
-        }
-    }
-    dict set pending_log_messages $mport [list]
-}
-
-# Handle message from an asynchronous task which should not
-# necessarily go to the currently active log file.
-proc macports::ui_message_async {id priority phase msg} {
-    variable ui_priority_prefixes
-    set prefix [dict get $ui_priority_prefixes $priority]
-
-    if {[macports::ui_isset ports_timestamps]} {
-        variable log_timestamp_format
-        set ts "[clock format [clock seconds] -format $log_timestamp_format] "
-    } else {
-        set ts ""
-    }
-
-    variable channels
-    foreach chan $channels($priority) {
-        puts $chan "$ts${prefix}${msg}"
-    }
-    variable current_log_mport; variable debuglog
-    if {$id eq $current_log_mport && [info exists debuglog]} {
-        set strprefix ":${priority}:${phase} "
-        foreach str [split $msg "\n"] {
-            puts $debuglog ${strprefix}${str}
-        }
-    } else {
-        variable pending_log_messages
-        dict lappend pending_log_messages $id [list $priority $phase $msg]
     }
 }
 
@@ -438,17 +370,11 @@ proc ui_message {priority prefix args} {
        }
     } 
 
-    if {[macports::ui_isset ports_timestamps]} {
-        set ts "[clock format [clock seconds] -format $macports::log_timestamp_format] "
-    } else {
-        set ts ""
-    }
-
     foreach chan $channels($priority) {
         if {[lindex $args 0] eq "-nonewline"} {
             puts -nonewline $chan $prefix[lindex $args 1]
         } else {
-            puts $chan "$ts$prefix[lindex $args 0]"
+            puts $chan $prefix[lindex $args 0]
         }
     }
 
@@ -495,13 +421,11 @@ proc macports::ui_init {priority args} {
     }
 
     # Simplify ui_$priority.
-    variable ui_priority_prefixes
     try {
         set prefix [ui_prefix $priority]
     } on error {} {
         set prefix [ui_prefix_default $priority]
     }
-    dict set ui_priority_prefixes $priority $prefix
     try {
         ::ui_init $priority $prefix $channels($priority) {*}$args
     } on error {} {
@@ -1303,7 +1227,7 @@ proc mportinit {{up_ui_options {}} {up_options {}} {up_variations {}}} {
             if {[regexp $sources_conf_source_re $line _ url flags]} {
                 set flags [split $flags ,]
                 foreach flag $flags {
-                    if {$flag ni [list nosync default own_portgroups_first]} {
+                    if {$flag ni [list nosync default]} {
                         ui_warn "$sources_conf source '$line' specifies invalid flag '$flag'"
                     }
                     if {$flag eq "default"} {
@@ -1563,8 +1487,13 @@ Please edit sources.conf and change '$url' to '[string range $url 0 26]macports/
         unset portimage_mode
     }
     if {![info exists portimage_mode]} {
-        # Default to archive mode
-        set portimage_mode archive
+        # Using an extracted directory is usually only a good idea if
+        # the filesystem supports COW clones.
+        if {![catch {fs_clone_capable [file join $portdbpath software]} result] && $result} {
+            set portimage_mode directory
+        } else {
+            set portimage_mode archive
+        }
     }
     set portimage::keep_imagedir [expr {$portimage_mode ne "archive"}]
     set portimage::keep_archive [expr {$portimage_mode ne "directory"}]
@@ -1690,8 +1619,6 @@ match macports.conf.default."
             } elseif {$os_major >= 10} {
                 if {[sysctl hw.cpu64bit_capable] == 1} {
                     set build_arch x86_64
-                } elseif {$os_arch eq "powerpc"} {
-                    set build_arch ppc
                 } else {
                     set build_arch i386
                 }
@@ -1764,7 +1691,7 @@ match macports.conf.default."
         }
     }
     if {![info exists cxx_stdlib]} {
-        if {$os_platform eq "darwin" && $os_major >= 11} {
+        if {$os_platform eq "darwin" && $os_major >= 10} {
             set cxx_stdlib libc++
         } elseif {$os_platform eq "darwin"} {
             set cxx_stdlib libstdc++
@@ -2016,47 +1943,29 @@ match macports.conf.default."
     }
 }
 
-# Call vwait on a variable after setting up a timer to write to it
-# after ms milliseconds.
-proc macports::vwait_with_timeout {var ms} {
-    set timeout_script_template {set %s [set %s]}
-    set timeout_script [string map [list %s $var] $timeout_script_template]
-    set timeout_eventid [after $ms $timeout_script]
-    vwait $var
-    after cancel $timeout_eventid
-}
-
 # call this just before you exit
 proc mportshutdown {} {
     global macports::portdbpath
-    # close the registry down so the cleanup stuff is called, e.g. vacuuming the db
-    registry::close
     # save cached values
     if {[file writable $portdbpath]} {
         global macports::ping_cache macports::compiler_version_cache \
-               macports::cache_dirty macports::pending_pings
-        if {[dict exists $cache_dirty compiler_versions]} {
-            macports::save_cache compiler_versions $compiler_version_cache
-        }
-        if {[dict size $pending_pings] > 0} {
-            # Wait up to 1 second for async pings to finish
-            set remaining 1000
-            while {$remaining > 0 && [dict size $pending_pings] > 0} {
-                set start [clock milliseconds]
-                macports::vwait_with_timeout ::macports::pending_pings $remaining
-                set remaining [expr {$remaining - ([clock milliseconds] - $start)}]
-            }
-        }
+               macports::cache_dirty
         # Only save the cache if it was updated
         if {[dict exists $cache_dirty pingtimes]} {
-            # don't save entries more than a week old
+            # don't save expired entries
             set now [clock seconds]
             set pinglist_fresh [dict filter $ping_cache script {host entry} {
-                expr {$now - [lindex $entry 1] < 604800}
+                expr {$now - [lindex $entry 1] < 86400}
             }]
             macports::save_cache pingtimes $pinglist_fresh
         }
+        if {[dict exists $cache_dirty compiler_versions]} {
+            macports::save_cache compiler_versions $compiler_version_cache
+        }
     }
+
+    # close it down so the cleanup stuff is called, e.g. vacuuming the db
+    registry::close
 }
 
 # Override variables. Used by portindex to evaluate Portfiles as though
@@ -2180,9 +2089,6 @@ proc macports::worker_init {workername portpath porturl portbuildpath options va
     $workername alias getportresourcepath macports::getportresourcepath
     $workername alias getportlogpath macports::getportlogpath
     $workername alias getdefaultportresourcepath macports::getdefaultportresourcepath
-    $workername alias getlocalporttreelist macports::getlocalporttreelist
-    $workername alias getlocaltreeoptions macports::getlocaltreeoptions
-    $workername alias getallporttrees macports::getallporttrees
     $workername alias getprotocol macports::getprotocol
     $workername alias getportdir macports::getportdir
     $workername alias findBinary macports::findBinary
@@ -2225,9 +2131,7 @@ proc macports::worker_init {workername portpath porturl portbuildpath options va
 
     # ping cache
     $workername alias get_pingtime macports::get_pingtime
-    $workername alias async_ping_start macports::async_ping_start
-    $workername alias wait_for_pingtime macports::wait_for_pingtime
-    $workername alias compare_pingtimes macports::compare_pingtimes
+    $workername alias set_pingtime macports::set_pingtime
 
     # archive_sites.conf handling
     $workername alias get_archive_sites_conf_values macports::get_archive_sites_conf_values
@@ -2338,13 +2242,7 @@ proc macports::get_tar_flags {suffix} {
         .tbz2 {
             return -j
         }
-        .bz2 {
-            return -j
-        }
         .tgz {
-            return -z
-        }
-        .gz {
             return -z
         }
         .txz {
@@ -2608,46 +2506,6 @@ proc macports::getdefaultportresourcepath {{path {}}} {
     return $proposedpath
 }
 
-##
-# @return the list of local port trees
-#
-proc macports::getlocalporttreelist {} {
-    global macports::sources
-    set sourcetreelist {}
-    foreach source $sources {
-        if {[macports::getprotocol $source] eq "file"} {
-            lappend sourcetreelist [string range [lindex ${source} 0] 7 end]
-        } elseif {[macports::getprotocol $source] eq "rsync"} {
-            lappend sourcetreelist [getsourcepath $source]
-        }
-    }
-    return ${sourcetreelist}
-}
-
-##
-# @return the options for local port tree @param tree
-#
-proc macports::getlocaltreeoptions {path} {
-    global macports::sources
-    set sourcetreelist {}
-    set path [file normalize ${path}]
-    foreach source $sources {
-        set spath [file normalize [string range [lindex ${source} 0] 7 end]]
-        if {${spath} eq ${path}} {
-            return [lrange ${source} 1 end]
-        }
-    }
-    return {}
-}
-
-proc macports::getallporttrees {} {
-    global macports::sources
-    set sourcetreelist {}
-    foreach source $sources {
-        lappend sourcetreelist [lindex ${source} 0]
-    }
-    return ${sourcetreelist}
-}
 
 ##
 # Opens a MacPorts portfile specified by a URL. The URL can be local (starting
@@ -3007,22 +2865,6 @@ proc _mportcheck_known_fail {options portinfo} {
     return 0
 }
 
-# Hint that a target is going to be run on an mport. This
-# enables performance enhancements in some cases.
-proc macports::target_hint {mport target} {
-    if {$target eq "livecheck"} {
-        if {[global_option_isset ports_dryrun]} {
-            return
-        }
-        variable fetch_threads
-        if {$fetch_threads == 0} {
-            return
-        }
-        set workername [ditem_key $mport workername]
-        $workername eval [list portlivecheck::livecheck_async_start]
-    }
-}
-
 ### _mportexec is private; may change without notice
 
 proc _mportexec {target mport} {
@@ -3039,8 +2881,6 @@ proc _mportexec {target mport} {
         (![macports::_target_needs_toolchain $workername $target] || (![catch {$workername eval [list _check_xcode_version]} result] && $result == 0)) &&
         ![catch {$workername eval [list check_supported_archs]} result] && $result == 0 &&
         ![catch {$workername eval [list eval_targets $target]} result] && $result == 0} {
-        set_phase main
-
         # If auto-clean mode, clean-up after dependency install
         global macports::portautoclean
         if {$portautoclean} {
@@ -3078,14 +2918,14 @@ proc macports::async_fetch_mport {target mport} {
     if {[dict exists $no_build_targets $target] && ![global_option_isset ports_source_only]
         && ![_mportinstalled $mport]
     } then {
-        $workername eval [list portarchivefetch::archivefetch_async_start $mport]
+        $workername eval [list portarchivefetch::archivefetch_async_start]
     }
     if {([_target_needs_deps $target] && (![dict exists $no_build_targets $target]
          || (![global_option_isset ports_binary_only] && ![_mportinstalled $mport]
          && ![$workername eval [list _archive_available]])))
          || $target eq "mirror"
     } then {
-        $workername eval [list portfetch::fetch_async_start $mport]
+        $workername eval [list portfetch::fetch_async_start]
     }
 }
 
@@ -4536,11 +4376,11 @@ proc mportinfo {mport} {
 }
 
 proc mportclose {mport} {
+    global macports::open_mports
     #macports::extracted_portdirs
     set refcnt [ditem_key $mport refcnt]
     incr refcnt -1
     if {$refcnt <= 0} {
-        global macports::open_mports macports::pending_log_messages
         set porturl [ditem_key $mport porturl]
         if {[dict exists $open_mports $porturl]} {
             set mports_for_url [dict get $open_mports $porturl]
@@ -4551,7 +4391,6 @@ proc mportclose {mport} {
                 dict unset open_mports $porturl
             }
         }
-        dict unset pending_log_messages $mport
         set workername [ditem_key $mport workername]
         catch {$workername eval [list portutil::_async_cleanup]}
         interp delete $workername
@@ -7175,12 +7014,6 @@ proc macports::load_ping_cache {name1 name2 op} {
 }
 
 # get cached ping time for host, modified by blacklist and preferred list
-# return status:
-# -2 blacklisted
-# -1 not in cache
-#  0 cached, stale
-#  1 cached, fresh
-#  2 preferred
 proc macports::get_pingtime {host} {
     variable host_cache
 
@@ -7188,15 +7021,15 @@ proc macports::get_pingtime {host} {
         variable host_blacklist
         foreach pattern $host_blacklist {
             if {[string match -nocase $pattern $host]} {
-                dict set host_cache $host -2
-                return -2
+                dict set host_cache $host -1
+                return -1
             }
         }
         variable preferred_hosts
         foreach pattern $preferred_hosts {
             if {[string match -nocase $pattern $host]} {
-                dict set host_cache $host 2
-                return 2
+                dict set host_cache $host 0
+                return 0
             }
         }
         dict set host_cache $host {}
@@ -7207,94 +7040,20 @@ proc macports::get_pingtime {host} {
 
     variable ping_cache
     if {[dict exists $ping_cache $host]} {
-        # consider entries stale after 1 day
-        set status [expr {[clock seconds] - [lindex [dict get $ping_cache $host] 1] <= 86400}]
-        return [list $status [lindex [dict get $ping_cache $host] 0]]
+        # expire entries after 1 day
+        if {[clock seconds] - [lindex [dict get $ping_cache $host] 1] <= 86400} {
+            return [lindex [dict get $ping_cache $host] 0]
+        }
     }
-    return -1
-}
-
-# wait until the host of the given url is present in the ping cache
-proc macports::wait_for_pingtime {url} {
-    set url_parts [::uri::split $url]
-    if {![dict exists $url_parts host]} {
-        return
-    }
-    set host [dict get $url_parts host]
-    set status [lindex [get_pingtime $host] 0]
-    while {$status == -1 || $status == 0} {
-        vwait ::macports::ping_cache
-        set status [lindex [get_pingtime $host] 0]
-    }
+    return {}
 }
 
 # cache a ping time of ms for host
 proc macports::set_pingtime {host ms} {
     variable ping_cache
     dict set ping_cache $host [list $ms [clock seconds]]
-    variable pending_pings
-    dict unset pending_pings $host
     variable cache_dirty
     dict set cache_dirty pingtimes 1
-}
-
-# Start asynchronous pings of the hosts in a list of URLs if there is
-# not a fresh cache entry for them.
-proc macports::async_ping_start {urls} {
-    variable pending_pings
-    foreach url $urls {
-        set url_parts [::uri::split $url]
-        # skip if required components are not present
-        if {![dict exists $url_parts scheme] || ![dict exists $url_parts host]} {
-            continue
-        }
-        set host [dict get $url_parts host]
-        # skip if a ping is already pending for this host
-        if {[dict exists $pending_pings $host]} {
-            continue
-        }
-        # skip if the cache entry is not missing or stale
-        set status [lindex [get_pingtime $host] 0]
-        if {$status != 0 && $status != -1} {
-            continue
-        }
-        ui_debug "starting ping of $host"
-        dict set pending_pings $host 1
-        mport_fetch_thread::queue_procresult ping [list $host [dict get $url_parts scheme]] macports::set_pingtime
-    }
-}
-
-# Compare two URLs according to the ping times of the hosts.
-# Suitable for use with lsort -command.
-proc macports::compare_pingtimes {a b} {
-    set a_parts [::uri::split $a]
-    set b_parts [::uri::split $b]
-
-    set a_scheme [expr {[dict exists $a_parts scheme] ? [dict get $a_parts scheme] : {}}]
-    set b_scheme [expr {[dict exists $b_parts scheme] ? [dict get $b_parts scheme] : {}}]
-    # file:// can't be pinged and is assumed to be faster
-    if {$a_scheme eq "file"} {
-        return [expr {$b_scheme eq "file" ? 0 : -1}]
-    } elseif {$b_scheme eq "file"} {
-        return 1
-    }
-
-    if {![dict exists $a_parts host]} {
-        return [dict exists $b_parts host]
-    } elseif {![dict exists $b_parts host]} {
-        return -1
-    }
-    lassign [get_pingtime [dict get $a_parts host]] a_status a_pingtime
-    lassign [get_pingtime [dict get $b_parts host]] b_status b_pingtime
-    if {$a_pingtime ne {} && $b_pingtime ne {}} {
-        # compare actual ping times (make sure to return an integer)
-        set result [expr {round($a_pingtime - $b_pingtime)}]
-        if {$result != 0} {
-            return $result
-        }
-    }
-    # for ties or unknown times, status is all that counts
-    return [expr {$b_status - $a_status}]
 }
 
 # Deferred loading of compiler version cache
@@ -7566,11 +7325,6 @@ proc macports::get_parallel_jobs {{mem_restrict yes}} {
 proc macports::get_compatible_xcode_versions {} {
     variable macos_version_major
     switch $macos_version_major {
-        10.4 {
-            set min 2.0
-            set ok 2.4.1
-            set rec 2.5
-        }
         10.5 {
             set min 3.0
             set ok 3.1
